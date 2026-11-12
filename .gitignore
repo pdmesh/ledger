@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/binaries/
+src-tauri/gen/
+
+# Local data -- never commit real statements, ledgers, backups or keys
+*.sqlite3
+*.sqlite3-*
+/data/
+statements/
+backups/
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
