@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+/* Design tokens. Light by default, dark via OS preference. */
+@theme {
+  --color-bg: #f7f7f5;
+  --color-surface: #ffffff;
+  --color-muted: #efefec;
+  --color-border: #e2e2dd;
+  --color-fg: #1c1c1a;
+  --color-fg-muted: #5e5e58;
+  --color-fg-subtle: #8f8f88;
+  --color-accent: #2f5bd3;
+  --color-accent-fg: #ffffff;
+  --color-positive: #1f8a4c;
+  --color-negative: #c8372d;
+  --color-warning: #b26a00;
+
+  /* chart roles */
+  --color-role-income: #1f8a4c;
+  --color-role-expense: #c8372d;
+  --color-role-investment: #6b4fd6;
+  --color-role-transfer: #8f8f88;
+  --color-role-adjustment: #b26a00;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #121211;
+    --color-surface: #1a1a19;
+    --color-muted: #262624;
+    --color-border: #31312e;
+    --color-fg: #ecece8;
+    --color-fg-muted: #a6a69f;
+    --color-fg-subtle: #75756f;
+    --color-accent: #6d8ff0;
+    --color-accent-fg: #0d0d0c;
+    --color-positive: #4cc27e;
+    --color-negative: #f0675c;
+    --color-warning: #e3a33b;
+    --color-role-income: #4cc27e;
+    --color-role-expense: #f0675c;
+    --color-role-investment: #a28ff5;
+    --color-role-transfer: #75756f;
+    --color-role-adjustment: #e3a33b;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}

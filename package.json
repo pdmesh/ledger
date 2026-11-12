@@ -1,0 +1,14 @@
+{
+  "name": "personal-ledger",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "./scripts/build-sidecar.sh && tauri build --config src-tauri/tauri.bundle.conf.json",
+    "backend": "uv run --project backend ledger-server",
+    "web": "npm --prefix frontend run dev",
+    "test": "uv run --project backend pytest -q backend/tests && npm --prefix frontend run typecheck"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4"
+  }
+}
