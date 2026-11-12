@@ -53,8 +53,10 @@ export default function Intelligence() {
       await api.put("/intelligence", body);
       await cfg.reload();
       setMsg("Saved");
+      return true;
     } catch (e) {
       setError((e as Error).message);
+      return false;
     }
   };
   const storeKey = async (id: string) => {
@@ -68,11 +70,25 @@ export default function Intelligence() {
     }
   };
   const test = async (id: string) => {
-    setMsg(`Testing ${id}…`);
-    const r = await api.post<{ ok: boolean; error?: string; latency_ms?: number; model?: string }>(`/intelligence/providers/${id}/test`);
-    setMsg(r.ok ? `${id}: OK (${r.model}, ${r.latency_ms} ms)` : `${id}: ${r.error ?? "unexpected response"}`);
+    setError(null);
+    // The backend tests the saved configuration, so save pending edits first.
+    if (!(await save())) return;
+    setMsg(`Testing ${id}… (CLI providers can take up to a minute)`);
+    try {
+      const r = await api.post<{ ok: boolean; error?: string; latency_ms?: number; model?: string }>(`/intelligence/providers/${id}/test`);
+      setMsg(r.ok ? `${id}: OK (${r.model}, ${r.latency_ms} ms)` : `${id}: ${r.error ?? "unexpected response"}`);
+    } catch (e) {
+      setMsg(null);
+      setError(`${id}: ${(e as Error).message}`);
+    }
   };
-  const detect = async (name: string) => setCli({ ...cli, [name]: await api.get(`/intelligence/cli/${name}`) });
+  const detect = async (name: string, executable?: string | null) => {
+    try {
+      setCli({ ...cli, [name]: await api.get(`/intelligence/cli/${name}`, executable ? { executable } : undefined) });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   const route = (task: string) => draft.routing[task] ?? [];
   const setRoute = (task: string, idx: number, val: string) => {
     const chain = [...route(task)];
@@ -170,7 +186,7 @@ export default function Intelligence() {
               )}
               {p.kind === "cli" && p.cli && (
                 <div className="mt-3 flex items-center gap-2 text-xs">
-                  <Button size="sm" variant="outline" onClick={() => detect(p.cli!)}>
+                  <Button size="sm" variant="outline" onClick={() => detect(p.cli!, p.executable)}>
                     Detect
                   </Button>
                   {cli[p.cli] && (cli[p.cli].found ? <span className="text-positive">Found {cli[p.cli].version}</span> : <span className="text-negative">Not found on PATH</span>)}

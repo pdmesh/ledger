@@ -27,12 +27,56 @@ def _watch_parent(pid: int) -> None:
         threading.Thread(target=loop, name="parent-watchdog", daemon=True).start()
 
 
+def _augment_path() -> None:
+    """Give the backend the user's shell PATH.
+
+    macOS apps started from Finder/Dock inherit a minimal PATH (/usr/bin:/bin:...), so
+    user-installed CLIs such as ``claude`` (~/.local/bin) or ``codex`` (Homebrew/npm) are
+    invisible to ``shutil.which``. Ask the login shell for its PATH and add common install
+    locations as a fallback.
+    """
+    import subprocess
+
+    current = os.environ.get("PATH", "").split(os.pathsep)
+    extra: list[str] = []
+    shell = os.environ.get("SHELL") or "/bin/zsh"
+    if os.name == "posix":
+        try:
+            out = subprocess.run(
+                [shell, "-ilc", 'printf "__LEDGER_PATH__%s" "$PATH"'],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                stdin=subprocess.DEVNULL,
+            )
+            marker = out.stdout.rfind("__LEDGER_PATH__")
+            if marker >= 0:
+                extra += out.stdout[marker + len("__LEDGER_PATH__") :].strip().split(os.pathsep)
+        except Exception:
+            pass
+    home = Path.home()
+    extra += [
+        str(home / ".local/bin"),
+        str(home / ".claude/local"),
+        str(home / ".npm-global/bin"),
+        str(home / ".bun/bin"),
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+    ]
+    merged: list[str] = []
+    for p in current + extra:
+        if p and p not in merged:
+            merged.append(p)
+    os.environ["PATH"] = os.pathsep.join(merged)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Personal Ledger local backend")
     parser.add_argument("--port", type=int, default=int(os.environ.get("LEDGER_PORT", "8765")))
     parser.add_argument("--data-dir", type=Path, default=None)
     parser.add_argument("--log-level", default="info")
     args = parser.parse_args()
+    _augment_path()
 
     import uvicorn
 
