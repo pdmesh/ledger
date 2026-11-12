@@ -1,7 +1,8 @@
 import { BarChart3, FileInput, LayoutDashboard, Landmark, ListOrdered, Settings as SettingsIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ScopeBar } from "./components/ScopeBar";
 import { cn, ErrorNote } from "./components/ui";
+import { backendStatus, type BackendStatus } from "./lib/api";
 import { useApp } from "./lib/context";
 import AccountsPage from "./pages/Accounts";
 import AnalyticsPage from "./pages/Analytics";
@@ -35,7 +36,7 @@ export default function App() {
   if (!ready) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        {error ? <ErrorNote error={`Cannot reach the local backend: ${error}`} /> : <p className="text-fg-muted">Starting…</p>}
+        {error ? <BackendError message={error} /> : <p className="text-fg-muted">Starting the local backend…</p>}
       </div>
     );
   }
@@ -77,6 +78,33 @@ export default function App() {
           {nav.section === "settings" && <SettingsPage />}
         </div>
       </main>
+    </div>
+  );
+}
+
+function BackendError({ message }: { message: string }) {
+  const { refresh } = useApp();
+  const [status, setStatus] = useState<BackendStatus | null>(null);
+  useEffect(() => {
+    backendStatus().then(setStatus).catch(() => setStatus(null));
+  }, []);
+  return (
+    <div className="w-full max-w-3xl space-y-3">
+      <ErrorNote error={`Cannot reach the local backend: ${message}`} />
+      {status && (
+        <div className="space-y-2 text-sm">
+          <p className="text-fg-muted">
+            Backend at {status.url} is {status.running ? "running" : "not running"}
+            {status.exit_code !== null && ` (exit code ${status.exit_code})`}. Full log: <code>{status.log_file}</code>
+          </p>
+          {status.log_tail.length > 0 && (
+            <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-[11px] leading-relaxed">{status.log_tail.join("\n")}</pre>
+          )}
+        </div>
+      )}
+      <button className="text-sm text-accent hover:underline" onClick={() => void refresh()}>
+        Try again
+      </button>
     </div>
   );
 }

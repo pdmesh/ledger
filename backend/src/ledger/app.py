@@ -85,13 +85,6 @@ def create_app(rt: RuntimeSettings | None = None) -> FastAPI:
     app.state.db = db
     app.state.rt = rt
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=ALLOWED_ORIGINS,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
     @app.middleware("http")
     async def auth(request: Request, call_next):  # type: ignore[no-untyped-def]
         # The backend binds to loopback only; the per-launch token additionally stops other
@@ -107,6 +100,16 @@ def create_app(rt: RuntimeSettings | None = None) -> FastAPI:
             if not secrets.compare_digest(token, rt.api_token):
                 return JSONResponse({"detail": "unauthorized"}, status_code=401)
         return await call_next(request)
+
+    # Added last so it is the outermost layer: every response, including 401s from the auth
+    # check above, carries CORS headers, so the UI sees the real error rather than an
+    # opaque network failure.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     for r in (system, people, taxonomy, documents, transactions, analytics, intelligence):
         app.include_router(r.router, prefix="/api")

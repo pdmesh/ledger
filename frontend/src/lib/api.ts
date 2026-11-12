@@ -31,6 +31,32 @@ async function backendConfig(): Promise<BackendConfig> {
   return configPromise;
 }
 
+export interface BackendStatus {
+  url: string;
+  running: boolean;
+  exit_code: number | null;
+  spawn_error: string | null;
+  log_tail: string[];
+  log_file: string;
+}
+
+/** Shell-side view of the backend process (desktop app only). */
+export async function backendStatus(): Promise<BackendStatus | null> {
+  if (!isTauri()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<BackendStatus>("backend_status");
+}
+
+/** The backend process is not running, so retrying cannot help. */
+export class BackendDownError extends Error {
+  constructor(public status: BackendStatus) {
+    super(
+      status.spawn_error ??
+        `The local backend stopped${status.exit_code !== null ? ` (exit code ${status.exit_code})` : ""}.`,
+    );
+  }
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -62,7 +88,10 @@ async function request<T>(method: string, path: string, body?: unknown, query?: 
     headers["Content-Type"] = "application/json";
     payload = JSON.stringify(body);
   }
-  // Wait for the sidecar to come up on first launch.
+  // Wait for the backend to come up. A cold first start (creating the Python environment,
+  // macOS scanning new native libraries) can take a while, so allow up to ~2 minutes, but
+  // stop at once if the shell reports that the process has exited.
+  const deadline = Date.now() + 120_000;
   for (let attempt = 0; ; attempt++) {
     try {
       const res = await fetch(`${cfg.base}/api${path}${qs(query)}`, { method, headers, body: payload });
@@ -79,7 +108,11 @@ async function request<T>(method: string, path: string, body?: unknown, query?: 
       if (res.status === 204) return undefined as T;
       return (await res.json()) as T;
     } catch (e) {
-      if (e instanceof ApiError || attempt >= 20) throw e;
+      if (e instanceof ApiError || Date.now() > deadline) throw e;
+      if (attempt % 4 === 3) {
+        const st = await backendStatus().catch(() => null);
+        if (st && !st.running) throw new BackendDownError(st);
+      }
       await new Promise((r) => setTimeout(r, 500));
     }
   }
