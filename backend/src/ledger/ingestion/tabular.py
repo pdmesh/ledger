@@ -111,10 +111,13 @@ def _norm_header(v: Any) -> str:
     return s.strip(" :.")
 
 
+_NORMALIZED_SYNONYMS = {f: tuple(_norm_header(n) for n in names) for f, names in SYNONYMS.items()}
+
+
 def _match_field(header: str) -> str | None:
     if not header:
         return None
-    for fld, names in SYNONYMS.items():
+    for fld, names in _NORMALIZED_SYNONYMS.items():
         if header in names:
             return fld
     # fuzzy: header starts with a synonym ("withdrawal amt (inr)")

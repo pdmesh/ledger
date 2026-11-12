@@ -89,6 +89,8 @@ def test_reimport_is_idempotent_and_overlaps_dedupe(db, rt, household):
         live = s.scalars(select(Transaction).where(Transaction.duplicate_of_id.is_(None))).all()
         dups = s.scalars(select(Transaction).where(Transaction.duplicate_of_id.is_not(None))).all()
         assert len(dups) == 4  # four overlapping rows kept for provenance but flagged
+        overlap = s.scalars(select(Document).order_by(Document.id.desc())).first()
+        assert overlap.stats["duplicates_across_documents"] == 4  # exact fingerprint matches
         assert len(live) == before + 2  # Feb salary + Feb swiggy
         feb_salary = by_desc(s, "SALARY FEB")[0]
         assert feb_salary.category.slug == "salary"

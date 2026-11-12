@@ -9,7 +9,43 @@ _WS = re.compile(r"\s+")
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 # Payment-rail and statement noise tokens that never identify a merchant.
-NOISE_TOKENS = {
+MONTHS = {
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "may",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "sept",
+    "oct",
+    "nov",
+    "dec",
+    "january",
+    "february",
+    "march",
+    "april",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+}
+
+NOISE_TOKENS = MONTHS | {
+    "cc",
+    "wdl",
+    "salary",
+    "sal",
+    "received",
+    "thank",
+    "you",
+    "bill",
+    "emi",
     "upi",
     "pos",
     "neft",

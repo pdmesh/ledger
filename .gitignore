@@ -31,3 +31,5 @@ backups/
 .DS_Store
 .idea/
 .vscode/
+*.spec
+*.tsbuildinfo
