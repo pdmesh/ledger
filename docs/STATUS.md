@@ -5,7 +5,7 @@ tested · 🟡 = partial · ⬜ = not started.
 
 | Capability | Status | Notes |
 |---|---|---|
-| Desktop application | 🟡 | The Tauri 2 shell compiles and manages the sidecar. Not yet signed or notarized for macOS. |
+| Desktop application | 🟡 | The Tauri 2 shell starts and stops the sidecar and passes the per-launch token, verified with a Linux `.deb` release build. The macOS `.app`/`.dmg` targets are configured but have not been built or signed. The sidecar is about 135 MB, mostly LiteLLM. |
 | Local financial database | ✅ | SQLite (WAL) with Alembic migrations and a drift test. |
 | Country and currency configuration | ✅ | Onboarding, presets, and base, account and transaction currencies. |
 | Multiple household identities and aliases | ✅ | Ownership is inferred from statement holder blocks. |

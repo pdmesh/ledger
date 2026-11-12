@@ -67,7 +67,8 @@ fn spawn_backend(data_dir: PathBuf, port: u16, token: &str) -> std::io::Result<C
         .arg(port.to_string())
         .arg("--data-dir")
         .arg(&data_dir)
-        .env("LEDGER_API_TOKEN", token);
+        .env("LEDGER_API_TOKEN", token)
+        .env("LEDGER_PARENT_PID", std::process::id().to_string());
     cmd.spawn()
 }
 
