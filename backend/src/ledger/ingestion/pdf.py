@@ -46,8 +46,13 @@ def render_pages(
         with tempfile.TemporaryDirectory(prefix="ledger-pages-") as tmp:
             out = []
             for i in range(min(len(doc), max_pages)):
-                img = doc[i].render(scale=dpi / 72).to_pil()
-                img.thumbnail((1600, 1600))  # enough to read; keeps requests small
+                page = doc[i]
+                w, h = page.get_size()  # points
+                if not (0 < w <= 14_400 and 0 < h <= 14_400):  # PDF's own 200-inch limit
+                    continue
+                # Size the bitmap before rendering, so a huge page can't allocate a huge one.
+                scale = min(dpi / 72, 1600 / max(w, h))
+                img = page.render(scale=scale).to_pil()
                 p = Path(tmp) / f"page-{i + 1}.png"
                 img.save(p, optimize=True)
                 out.append(p)

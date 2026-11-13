@@ -13,6 +13,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Document types the OS may open; anything else could be launched as a program.
+OPENABLE_SUFFIXES = {".pdf", ".csv", ".tsv", ".txt", ".xlsx", ".xls"}
+
 
 class OpenError(Exception):
     pass

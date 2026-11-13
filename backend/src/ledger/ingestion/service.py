@@ -83,6 +83,9 @@ def new_batch(session: Session, source: str) -> ImportBatch:
     return b
 
 
+ARCHIVE_SUFFIX = {"pdf": ".pdf", "csv": ".csv", "xlsx": ".xlsx", "xls": ".xls"}
+
+
 def register_file(
     session: Session,
     rt: RuntimeSettings,
@@ -104,7 +107,9 @@ def register_file(
     name = original_name or src.name
     dest_dir = rt.archive_dir / digest[:2]
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / f"{digest}{Path(name).suffix.lower() or '.' + fmt}"
+    # The archive name's extension comes from the detected format, never the upload's name,
+    # so "Open original" can't hand e.g. a ".command" file to the OS.
+    dest = dest_dir / f"{digest}{ARCHIVE_SUFFIX[fmt]}"
     if not dest.exists():
         shutil.copy2(src, dest)
     doc = Document(

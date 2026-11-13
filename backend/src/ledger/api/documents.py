@@ -183,6 +183,9 @@ def open_document(
     path = (rt.data_dir / d.archive_path).resolve()
     if rt.data_dir.resolve() not in path.parents:
         raise not_found("file")
+    # Only hand document types to the OS (older archives kept the upload's own extension).
+    if path.suffix.lower() not in desktop.OPENABLE_SUFFIXES:
+        raise bad_request(f"won't open a '{path.suffix}' file; use Re-process or delete it")
     try:
         desktop.open_path(path)
     except desktop.OpenError as e:

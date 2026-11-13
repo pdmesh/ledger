@@ -69,6 +69,25 @@ def test_open_original_uses_os_viewer(client, monkeypatch):
     assert opened and opened[0].suffix == ".csv" and opened[0].exists()
     assert c.post("/api/documents/9999/open").status_code == 404
 
+    # a file whose name says ".command" but whose bytes are a PDF is archived as ".pdf"
+    pdf = (FIXTURES / "fabrikam_card_2026-01.pdf").read_bytes()
+    assert (
+        c.post("/api/documents", files=[("files", ("statement.command", pdf))]).status_code == 200
+    )
+    sneaky = next(
+        d for d in c.get("/api/documents").json() if d["original_filename"] == "statement.command"
+    )
+    db = c.app_state.db
+    from ledger.models import Document
+
+    with db.session() as s:
+        d = s.get(Document, sneaky["id"])
+        assert d.archive_path.endswith(".pdf")
+        d.archive_path = d.archive_path[:-4] + ".command"  # as an older archive could be
+    opened.clear()
+    assert c.post(f"/api/documents/{sneaky['id']}/open").status_code == 400
+    assert opened == []
+
 
 def test_full_flow(client):
     c = client
