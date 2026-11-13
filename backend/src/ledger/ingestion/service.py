@@ -19,7 +19,13 @@ from ledger.classification.engine import Classifier, detect_recurring
 from ledger.config import current_version, get_setting
 from ledger.fx import apply_base_amount, base_currency
 from ledger.identity import resolve_account_owners
-from ledger.ingestion.extract import ExtractionError, detect_format, extract_statement
+from ledger.ingestion.extract import (
+    NO_ROWS_WARNING,
+    ExtractionError,
+    detect_format,
+    extract_statement,
+    post_validate,
+)
 from ledger.ingestion.parsing import (
     ParsedRow,
     ParsedStatement,
@@ -232,7 +238,17 @@ def _llm_extract(
             )
         )
     st.method = "llm"
-    st.warnings.append("Transactions extracted by AI; verify against the original document")
+    if not st.rows:
+        st.warnings.append("AI extraction found no transactions either")
+        return
+    # The rule-based pass found nothing and stopped validating; now that the AI recovered
+    # rows, replace its "nothing extracted" warning and run the period/balance checks on them.
+    st.warnings = [w for w in st.warnings if w != NO_ROWS_WARNING]
+    st.warnings.append(
+        "Rule-based extraction found no transactions; extracted by AI — verify against the "
+        "original document"
+    )
+    post_validate(st)
 
 
 def process_document(

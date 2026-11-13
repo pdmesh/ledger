@@ -128,3 +128,33 @@ def test_invalid_model_output_falls_back(db):
 def test_extract_json_tolerates_fences():
     assert extract_json('Sure!\n```json\n{"a": [1, 2]}\n```') == {"a": [1, 2]}
     assert extract_json('prefix {"a": "}"} suffix') == {"a": "}"}
+
+
+class FakeExtractor(Provider):
+    def complete_json(self, system, user):
+        rows = [
+            {"date": "2026-01-03", "description": "SHOP", "amount": "-120.50", "balance": None},
+            {"date": "2026-03-30", "description": "LATE", "amount": "-10", "balance": None},
+        ]
+        return ProviderResult(data={"transactions": rows}, text="", model="fake-x")
+
+
+def test_ai_extraction_replaces_no_rows_warning(db, tmp_path):
+    from ledger.ingestion.extract import NO_ROWS_WARNING, post_validate
+    from ledger.ingestion.parsing import ParsedStatement, StatementMetadata
+    from ledger.ingestion.service import _llm_extract
+
+    src = tmp_path / "statement.txt"
+    src.write_text("01/03 SHOP 120.50")
+    md = StatementMetadata()
+    md.period_start, md.period_end = date(2026, 1, 1), date(2026, 1, 31)
+    st = ParsedStatement([], "", md, "pdf:lines", [])
+    post_validate(st)
+    assert st.warnings == [NO_ROWS_WARNING]
+    with db.session() as s:
+        configure(s, allow_cloud=True)
+        _llm_extract(s, st, src, lambda cfg: FakeExtractor(cfg))
+    assert len(st.rows) == 2 and st.method == "llm"
+    assert NO_ROWS_WARNING not in st.warnings
+    # validation now runs on the AI rows: the March row is outside the January period
+    assert "1 transaction(s) fall outside the statement period" in st.warnings

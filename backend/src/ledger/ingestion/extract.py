@@ -117,14 +117,17 @@ def extract_statement(
     else:  # pragma: no cover
         raise ExtractionError(f"Unsupported format {fmt}")
 
-    _post_validate(st)
+    post_validate(st)
     return st
 
 
-def _post_validate(st: ParsedStatement) -> None:
+NO_ROWS_WARNING = "No transactions were extracted"
+
+
+def post_validate(st: ParsedStatement) -> None:
     md = st.metadata
     if not st.rows:
-        st.warnings.append("No transactions were extracted")
+        st.warnings.append(NO_ROWS_WARNING)
         return
     dates = [r.txn_date for r in st.rows]
     if md.period_start is None:
