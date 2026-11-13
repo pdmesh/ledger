@@ -1,8 +1,10 @@
 // Small shadcn-style primitives built on Tailwind (no runtime UI dependency).
 import clsx from "clsx";
-import { X } from "lucide-react";
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
-import { useEffect, useState } from "react";
+import { CircleHelp, X } from "lucide-react";
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, RefObject, SelectHTMLAttributes } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { GLOSSARY, type GlossaryKey } from "../lib/glossary";
 
 export const cn = clsx;
 
@@ -92,10 +94,13 @@ export function Select({ className, children, ...props }: SelectHTMLAttributes<H
   );
 }
 
-export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+export function Field({ label, hint, help, children }: { label: string; hint?: ReactNode; help?: GlossaryKey; children: ReactNode }) {
   return (
     <label className="block space-y-1">
-      <span className="text-xs font-medium text-fg-muted">{label}</span>
+      <span className="flex items-center gap-1 text-xs font-medium text-fg-muted">
+        {label}
+        {help && <Help term={help} />}
+      </span>
       {children}
       {hint && <span className="block text-[11px] text-fg-subtle">{hint}</span>}
     </label>
@@ -131,7 +136,11 @@ export function Drawer({ open, onClose, title, children, wide }: { open: boolean
     <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
       <aside
         className={cn("flex h-full w-full flex-col border-l border-border bg-bg shadow-xl", wide ? "max-w-3xl" : "max-w-xl")}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          // don't toggle a surrounding <label>'s control or open a clickable row
+          e.preventDefault();
+          e.stopPropagation();
+        }}
       >
         <header className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="truncate text-base font-semibold">{title}</h2>
@@ -253,12 +262,106 @@ export function ErrorNote({ error }: { error: string | null | undefined }) {
 }
 
 export function Confidence({ value, method }: { value: number | null; method: string | null }) {
-  if (method === "user") return <Badge tone="accent">You</Badge>;
+  const how = method && method in GLOSSARY ? GLOSSARY[method as GlossaryKey] : null;
+  if (method === "user")
+    return (
+      <Term term="user">
+        <Badge tone="accent">You</Badge>
+      </Term>
+    );
   if (value === null || value === undefined) return <Badge>—</Badge>;
   const tone = value >= 0.8 ? "positive" : value >= 0.5 ? "warning" : "negative";
   return (
-    <Badge tone={tone} className="tabular-nums">
-      {Math.round(value * 100)}%
-    </Badge>
+    <Term
+      text={
+        <>
+          {Math.round(value * 100)}% confidence in this category.{how ? ` ${how}` : ""}
+        </>
+      }
+    >
+      <Badge tone={tone} className="tabular-nums">
+        {Math.round(value * 100)}%
+      </Badge>
+    </Term>
+  );
+}
+
+// --------------------------------------------------------------------------------------
+// Help tooltips. Rendered in a portal with fixed positioning so scrolling tables and
+// cards never clip them. Shown on hover and on keyboard focus.
+// --------------------------------------------------------------------------------------
+
+function useTooltip() {
+  const ref = useRef<HTMLElement | null>(null);
+  const id = useId();
+  const [pos, setPos] = useState<{ x: number; y: number; below: boolean } | null>(null);
+  const show = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const below = r.top < 120;
+    setPos({ x: Math.min(Math.max(r.left + r.width / 2, 150), window.innerWidth - 150), y: below ? r.bottom + 6 : r.top - 6, below });
+  };
+  const hide = () => setPos(null);
+  return { ref, id, pos, handlers: { onMouseEnter: show, onMouseLeave: hide, onFocus: show, onBlur: hide } };
+}
+
+function TooltipBubble({ id, pos, text }: { id: string; pos: { x: number; y: number; below: boolean }; text: ReactNode }) {
+  return createPortal(
+    <div
+      id={id}
+      role="tooltip"
+      className="pointer-events-none fixed z-[60] w-max max-w-[280px] rounded-md border border-border bg-surface px-2.5 py-1.5 text-left text-xs font-normal normal-case leading-snug tracking-normal text-fg shadow-lg"
+      style={{ left: pos.x, top: pos.y, transform: `translate(-50%, ${pos.below ? "0" : "-100%"})` }}
+    >
+      {text}
+    </div>,
+    document.body,
+  );
+}
+
+const helpText = (term?: GlossaryKey, text?: ReactNode) => text ?? (term ? GLOSSARY[term] : null);
+
+/** A small “?” that explains the thing next to it. */
+export function Help({ term, text, className }: { term?: GlossaryKey; text?: ReactNode; className?: string }) {
+  const t = useTooltip();
+  const body = helpText(term, text);
+  if (!body) return null;
+  return (
+    <>
+      <span
+        ref={t.ref as RefObject<HTMLSpanElement>}
+        tabIndex={0}
+        role="button"
+        aria-label="Help"
+        aria-describedby={t.pos ? t.id : undefined}
+        className={cn("inline-flex cursor-help align-middle text-fg-subtle hover:text-fg-muted focus:text-fg-muted focus:outline-none", className)}
+        onClick={(e) => e.stopPropagation()}
+        {...t.handlers}
+      >
+        <CircleHelp size={12} />
+      </span>
+      {t.pos && <TooltipBubble id={t.id} pos={t.pos} text={body} />}
+    </>
+  );
+}
+
+/** Wrap a label or badge so hovering it explains it (dotted underline hints at that). */
+export function Term({ term, text, children, className }: { term?: GlossaryKey; text?: ReactNode; children: ReactNode; className?: string }) {
+  const t = useTooltip();
+  const body = helpText(term, text);
+  if (!body) return <>{children}</>;
+  return (
+    <>
+      <span
+        ref={t.ref as RefObject<HTMLSpanElement>}
+        tabIndex={0}
+        aria-describedby={t.pos ? t.id : undefined}
+        className={cn("cursor-help decoration-fg-subtle/60 decoration-dotted underline-offset-2 hover:underline focus:underline focus:outline-none", className)}
+        {...t.handlers}
+      >
+        {children}
+      </span>
+      {t.pos && <TooltipBubble id={t.id} pos={t.pos} text={body} />}
+    </>
   );
 }

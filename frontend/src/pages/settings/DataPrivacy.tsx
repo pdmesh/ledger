@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge, Button, Card, ErrorNote, confirmAction } from "../../components/ui";
+import { Badge, Button, Card, ErrorNote, Term, confirmAction } from "../../components/ui";
 import { api } from "../../lib/api";
 import { bytes } from "../../lib/format";
 import { useApi } from "../../lib/hooks";
@@ -71,14 +71,22 @@ export default function DataPrivacy() {
           <tbody>
             {(history.data ?? []).map((h) => (
               <tr key={h.id} className="border-t border-border/60">
-                <td className="num py-1.5 pr-3 text-xs text-fg-subtle">v{h.global_version}</td>
+                <td className="num py-1.5 pr-3 text-xs text-fg-subtle">
+                  <Term term="config_version">v{h.global_version}</Term>
+                </td>
                 <td className="py-1.5 pr-3 text-xs text-fg-subtle">{new Date(h.created_at).toLocaleString()}</td>
                 <td className="py-1.5 pr-3">
                   <Badge>{h.scope}</Badge>
                 </td>
                 <td className="py-1.5 pr-3">{h.summary}</td>
                 <td className="py-1.5">
-                  {h.propagation !== "none" && <Badge tone={h.propagation === "ai" ? "warning" : "accent"}>{h.propagation === "ai" ? "AI re-classification" : "re-applied"}</Badge>}
+                  {h.propagation !== "none" && (
+                    <Term term={h.propagation === "ai" ? "propagation_ai" : "propagation_deterministic"}>
+                      <Badge tone={h.propagation === "ai" ? "warning" : "accent"}>
+                        {h.propagation === "ai" ? "AI re-classification" : "Applied to existing transactions"}
+                      </Badge>
+                    </Term>
+                  )}
                 </td>
               </tr>
             ))}

@@ -1,18 +1,20 @@
 import { AlertTriangle } from "lucide-react";
 import type { NavTarget } from "../App";
 import { BarList, CashFlowChart, ROLE_COLOR } from "../components/charts";
-import { Card, Empty, ErrorNote } from "../components/ui";
+import { Card, Empty, ErrorNote, Help } from "../components/ui";
+import type { GlossaryKey } from "../lib/glossary";
 import { useApp } from "../lib/context";
 import { money, num, pct } from "../lib/format";
 import { useApi } from "../lib/hooks";
 import type { CategoryTotal, MerchantTotal, Overview } from "../lib/types";
 
-function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: keyof typeof ROLE_COLOR }) {
+function Stat({ label, value, sub, tone, help }: { label: string; value: string; sub?: string; tone?: keyof typeof ROLE_COLOR; help?: GlossaryKey }) {
   return (
     <div className="rounded-lg border border-border bg-surface px-4 py-3">
       <p className="flex items-center gap-1.5 text-xs text-fg-muted">
         {tone && <span className="h-2 w-2 rounded-sm" style={{ background: ROLE_COLOR[tone] }} />}
         {label}
+        {help && <Help term={help} />}
       </p>
       <p className="num mt-1 text-xl font-semibold tracking-tight">{value}</p>
       {sub && <p className="mt-0.5 text-[11px] text-fg-subtle">{sub}</p>}
@@ -48,11 +50,11 @@ export default function OverviewPage({ go }: { go: (t: NavTarget) => void }) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">
         <Stat label="Income" value={money(m.income)} tone="income" />
-        <Stat label="Consumption" value={money(m.consumption)} sub={num(m.refunds) ? `after ${money(m.refunds)} refunds` : undefined} tone="expense" />
-        <Stat label="Invested (net)" value={money(m.net_invested)} sub={`${money(m.investment_outflows)} in · ${money(m.investment_inflows)} out`} tone="investment" />
-        <Stat label="Net cash flow" value={money(m.net_cash_flow)} sub="external in − external out" />
-        <Stat label="Savings rate" value={pct(m.savings_rate)} sub="(income − consumption) / income" />
-        <Stat label="Financial movements" value={money(m.transfers)} sub="transfers & card settlements, not spending" tone="transfer" />
+        <Stat help="consumption" label="Consumption" value={money(m.consumption)} sub={num(m.refunds) ? `after ${money(m.refunds)} refunds` : undefined} tone="expense" />
+        <Stat help="net_invested" label="Invested (net)" value={money(m.net_invested)} sub={`${money(m.investment_outflows)} in · ${money(m.investment_inflows)} out`} tone="investment" />
+        <Stat help="net_cash_flow" label="Net cash flow" value={money(m.net_cash_flow)} sub="external in − external out" />
+        <Stat help="savings_rate" label="Savings rate" value={pct(m.savings_rate)} sub="(income − consumption) / income" />
+        <Stat help="financial_movements" label="Financial movements" value={money(m.transfers)} sub="transfers & card settlements, not spending" tone="transfer" />
       </div>
 
       {(o.low_confidence_count > 0 || o.unconverted_count > 0) && (

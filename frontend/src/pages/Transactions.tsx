@@ -1,7 +1,8 @@
 import { ChevronDown, ChevronUp, EyeOff, Pin, Repeat, Sigma } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TransactionDetail } from "../components/TransactionDetail";
-import { Badge, Button, Confidence, Drawer, ErrorNote, Input, Select, cn } from "../components/ui";
+import { Badge, Button, Confidence, Drawer, ErrorNote, Help, Input, Select, Term, cn } from "../components/ui";
+import { GLOSSARY, type GlossaryKey } from "../lib/glossary";
 import { categoryPath, useApp } from "../lib/context";
 import { date, humanize, money } from "../lib/format";
 import { useApi } from "../lib/hooks";
@@ -10,6 +11,7 @@ import { ROLES, ROLE_LABEL, type DocumentInfo, type SourceTotals, type Txn, type
 type Filter = Record<string, string | number | (string | number)[] | undefined>;
 
 const PAGE = 100;
+const methodKey = (m: string | null): GlossaryKey | undefined => (m && m in GLOSSARY ? (m as GlossaryKey) : undefined);
 const TOTALS_KEY = "ledger.txn.totals";
 
 function readPref(): "shown" | "hidden" | "expanded" {
@@ -139,7 +141,11 @@ export default function TransactionsPage({ initialFilter }: { initialFilter?: Fi
               <th className="px-3 py-2 font-medium">Category</th>
               <th className="px-3 py-2 font-medium">Account</th>
               <th className="px-3 py-2 text-right font-medium">Amount</th>
-              <th className="px-3 py-2 font-medium">Confidence</th>
+              <th className="px-3 py-2 font-medium">
+                <span className="inline-flex items-center gap-1">
+                  Confidence <Help term="classification_confidence" />
+                </span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -172,7 +178,9 @@ export default function TransactionsPage({ initialFilter }: { initialFilter?: Fi
                 <td className="whitespace-nowrap px-3 py-2">
                   <span className="flex items-center gap-1.5">
                     <Confidence value={t.classification_confidence} method={t.classification_method} />
-                    <span className="text-[11px] text-fg-subtle">{humanize(t.classification_method)}</span>
+                    <Term term={methodKey(t.classification_method)} className="text-[11px] text-fg-subtle">
+                      {t.classification_method === "llm" ? "AI" : humanize(t.classification_method)}
+                    </Term>
                     {t.duplicate_of_id && <Badge tone="warning">duplicate</Badge>}
                   </span>
                 </td>

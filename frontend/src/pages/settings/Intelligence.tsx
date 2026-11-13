@@ -1,7 +1,7 @@
 import { Cloud, HardDrive, KeyRound, List, Terminal, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Badge, Button, Card, ErrorNote, Field, Input, Select, Toggle } from "../../components/ui";
+import { Badge, Button, Card, ErrorNote, Field, Help, Input, Select, Toggle } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import type { IntelligenceConfig, ProviderConfig } from "../../lib/types";
@@ -115,12 +115,12 @@ export default function Intelligence() {
           <Toggle
             checked={draft.allow_cloud}
             onChange={(v) => setDraft({ ...draft, allow_cloud: v })}
-            label={<span>Allow cloud and CLI providers <span className="text-xs text-fg-muted">— transaction descriptions and amounts are sent to them. Local providers are always allowed.</span></span>}
+            label={<span>Allow cloud and CLI providers <Help term="allow_cloud" /> <span className="text-xs text-fg-muted">— transaction descriptions and amounts are sent to them. Local providers are always allowed.</span></span>}
           />
           <Toggle
             checked={draft.share_identity_names}
             onChange={(v) => setDraft({ ...draft, share_identity_names: v })}
-            label={<span>Share household names with cloud providers <span className="text-xs text-fg-muted">— otherwise replaced by “Person 1”, “Person 2”.</span></span>}
+            label={<span>Share household names with cloud providers <Help term="share_names" /> <span className="text-xs text-fg-muted">— otherwise replaced by “Person 1”, “Person 2”.</span></span>}
           />
           <p className="text-xs text-fg-muted">
             With no provider configured the ledger runs fully deterministically: rules, merchant mappings and your corrections still classify
@@ -179,7 +179,7 @@ export default function Intelligence() {
                     <Field label="Executable" hint="Official CLI, installed and logged in by you.">
                       <Input value={p.executable ?? ""} placeholder={p.cli ?? ""} onChange={(e) => upd(i, { executable: e.target.value || null })} />
                     </Field>
-                    <Field label="Model">
+                    <Field label="Model" help="cli_default">
                       <ModelField provider={p} onChange={(model) => upd(i, { model: model || null })} />
                     </Field>
                   </>
@@ -208,7 +208,7 @@ export default function Intelligence() {
         </div>
       </Card>
 
-      <Card title="Task routing">
+      <Card title={<span className="flex items-center gap-1.5">Task routing <Help term="task_routing" /></span>}>
         <p className="mb-3 text-xs text-fg-muted">
           Choose a model per task, with fallbacks tried in order. Tasks without a route use “default”. Use small/local models for routine
           classification and reserve stronger ones for extraction and adjudication.

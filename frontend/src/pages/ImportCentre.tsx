@@ -1,7 +1,7 @@
 import { FileUp, FolderSync, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
-import { Badge, Button, Card, Drawer, Empty, ErrorNote, Field, Input, Toggle, cn, confirmAction } from "../components/ui";
+import { Badge, Button, Card, Drawer, Empty, ErrorNote, Field, Help, Input, Term, Toggle, cn, confirmAction } from "../components/ui";
 import { api } from "../lib/api";
 import { useApp } from "../lib/context";
 import { bytes, date, humanize, money } from "../lib/format";
@@ -164,7 +164,11 @@ export default function ImportCentre() {
                 <th className="px-3 py-2 font-medium">Period</th>
                 <th className="px-3 py-2 font-medium">Transactions</th>
                 <th className="px-3 py-2 text-right font-medium">Money in</th>
-                <th className="px-3 py-2 text-right font-medium">Money out</th>
+                <th className="px-3 py-2 text-right font-medium">
+                  <span className="inline-flex items-center gap-1">
+                    Money out <Help term="money_in_out" />
+                  </span>
+                </th>
                 <th className="px-3 py-2 font-medium">Status</th>
               </tr>
             </thead>
@@ -198,7 +202,9 @@ export default function ImportCentre() {
                   </td>
                   <td className="px-3 py-2">
                     <span className="flex flex-wrap items-center gap-1">
-                      <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge>
+                      <Term term={d.status === "duplicate" ? "doc_duplicate" : undefined}>
+                        <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge>
+                      </Term>
                       {d.warnings.length > 0 && <Badge tone="warning">{d.warnings.length} warning{d.warnings.length > 1 ? "s" : ""}</Badge>}
                     </span>
                   </td>

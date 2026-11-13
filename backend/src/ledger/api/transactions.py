@@ -366,10 +366,16 @@ def delete_manual(txn_id: int, s: Session = Depends(get_session)) -> dict[str, A
 def list_links(
     kind: str | None = None,
     status: str | None = None,
+    sort: str = "recent",  # recent|confidence (least certain first, for review)
     limit: int = 200,
     s: Session = Depends(get_session),
 ) -> list[dict[str, Any]]:
-    q = select(ReconciliationLink).order_by(ReconciliationLink.id.desc()).limit(limit)
+    order = (
+        (ReconciliationLink.confidence.asc(), ReconciliationLink.id.desc())
+        if sort == "confidence"
+        else (ReconciliationLink.id.desc(),)
+    )
+    q = select(ReconciliationLink).order_by(*order).limit(limit)
     if kind:
         q = q.where(ReconciliationLink.kind == kind)
     if status:
@@ -386,6 +392,23 @@ def list_links(
             }
         )
     return out
+
+
+@router.get("/reconciliation/summary")
+def links_summary(s: Session = Depends(get_session)) -> dict[str, Any]:
+    """Link counts by status and kind; ``to_review`` drives the navigation badge."""
+    rows = s.execute(
+        select(ReconciliationLink.status, ReconciliationLink.kind, func.count()).group_by(
+            ReconciliationLink.status, ReconciliationLink.kind
+        )
+    ).all()
+    by_status: dict[str, dict[str, int]] = {}
+    for status, kind, n in rows:
+        by_status.setdefault(status, {})[kind] = n
+    return {
+        "to_review": sum(by_status.get("auto", {}).values()),
+        "by_status": by_status,
+    }
 
 
 class LinkStatus(BaseModel):

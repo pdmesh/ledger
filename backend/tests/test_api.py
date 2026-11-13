@@ -137,6 +137,12 @@ def test_full_flow(client):
 
     # reconciliation links are visible and reversible
     links = c.get("/api/reconciliation/links").json()
+    summary = c.get("/api/reconciliation/summary").json()
+    assert summary["to_review"] == sum(lk["status"] == "auto" for lk in links) > 0
+    review = c.get(
+        "/api/reconciliation/links", params={"status": "auto", "sort": "confidence"}
+    ).json()
+    assert [lk["confidence"] for lk in review] == sorted(lk["confidence"] for lk in review)
     transfer = next(lk for lk in links if lk["kind"] == "internal_transfer")
     assert (
         c.post(
@@ -144,6 +150,9 @@ def test_full_flow(client):
         ).status_code
         == 200
     )
+    after = c.get("/api/reconciliation/summary").json()
+    assert after["to_review"] == summary["to_review"] - 1
+    assert after["by_status"]["rejected"]["internal_transfer"] == 1
     out = c.get(f"/api/transactions/{transfer['from_transaction_id']}").json()
     assert out["classification_method"] != "reconciliation"
     drain(c)

@@ -24,7 +24,7 @@ export default function SettingsPage() {
           { value: "taxonomy", label: "Taxonomy" },
           { value: "merchants", label: "Merchants" },
           { value: "rules", label: "Classification rules" },
-          { value: "reconciliation", label: "Reconciliation" },
+          { value: "reconciliation", label: "Reconciliation rules" },
           { value: "intelligence", label: "Intelligence providers" },
           { value: "data", label: "Privacy & data" },
         ]}

@@ -1,23 +1,26 @@
-import { BarChart3, FileInput, LayoutDashboard, Landmark, ListOrdered, Settings as SettingsIcon } from "lucide-react";
+import { BarChart3, FileInput, GitCompareArrows, LayoutDashboard, Landmark, ListOrdered, Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Toaster } from "sonner";
 import { ScopeBar } from "./components/ScopeBar";
 import { cn, ConfirmHost, ErrorNote } from "./components/ui";
 import { backendStatus, type BackendStatus } from "./lib/api";
 import { useApp } from "./lib/context";
+import { useApi } from "./lib/hooks";
 import AccountsPage from "./pages/Accounts";
 import AnalyticsPage from "./pages/Analytics";
 import ImportCentre from "./pages/ImportCentre";
 import Onboarding from "./pages/Onboarding";
 import OverviewPage from "./pages/Overview";
+import ReconciliationPage, { RECON_CHANGED, type LinkSummary } from "./pages/Reconciliation";
 import SettingsPage from "./pages/Settings";
 import TransactionsPage from "./pages/Transactions";
 
-export type Section = "overview" | "transactions" | "accounts" | "import" | "analytics" | "settings";
+export type Section = "overview" | "transactions" | "reconciliation" | "accounts" | "import" | "analytics" | "settings";
 
 const NAV: { id: Section; label: string; icon: ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <LayoutDashboard size={16} /> },
   { id: "transactions", label: "Transactions", icon: <ListOrdered size={16} /> },
+  { id: "reconciliation", label: "Reconciliation", icon: <GitCompareArrows size={16} /> },
   { id: "accounts", label: "Accounts", icon: <Landmark size={16} /> },
   { id: "import", label: "Import Centre", icon: <FileInput size={16} /> },
   { id: "analytics", label: "Analytics", icon: <BarChart3 size={16} /> },
@@ -62,6 +65,7 @@ export default function App() {
               >
                 {n.icon}
                 {n.label}
+                {n.id === "reconciliation" && <ReviewCount />}
               </button>
             </li>
           ))}
@@ -76,12 +80,34 @@ export default function App() {
           {nav.section === "accounts" && <AccountsPage go={go} />}
           {nav.section === "import" && <ImportCentre />}
           {nav.section === "analytics" && <AnalyticsPage go={go} />}
+          {nav.section === "reconciliation" && <ReconciliationPage />}
           {nav.section === "settings" && <SettingsPage />}
         </div>
       </main>
       <Toaster position="top-right" theme="system" richColors closeButton />
       <ConfirmHost />
     </div>
+  );
+}
+
+/** Number of automatic matches still waiting for the user's confirmation. */
+function ReviewCount() {
+  const s = useApi<LinkSummary>("/reconciliation/summary");
+  useEffect(() => {
+    const h = () => void s.reload();
+    window.addEventListener(RECON_CHANGED, h);
+    const t = setInterval(h, 30_000); // imports finish in the background
+    return () => {
+      window.removeEventListener(RECON_CHANGED, h);
+      clearInterval(t);
+    };
+  }, [s.reload]);
+  const n = s.data?.to_review ?? 0;
+  if (!n) return null;
+  return (
+    <span className="ml-auto rounded-full bg-warning/15 px-1.5 text-[11px] font-medium tabular-nums text-warning" title={`${n} matches need review`}>
+      {n}
+    </span>
   );
 }
 
