@@ -1,7 +1,8 @@
 import { BarChart3, FileInput, LayoutDashboard, Landmark, ListOrdered, Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { Toaster } from "sonner";
 import { ScopeBar } from "./components/ScopeBar";
-import { cn, ErrorNote } from "./components/ui";
+import { cn, ConfirmHost, ErrorNote } from "./components/ui";
 import { backendStatus, type BackendStatus } from "./lib/api";
 import { useApp } from "./lib/context";
 import AccountsPage from "./pages/Accounts";
@@ -78,6 +79,8 @@ export default function App() {
           {nav.section === "settings" && <SettingsPage />}
         </div>
       </main>
+      <Toaster position="top-right" theme="system" richColors closeButton />
+      <ConfirmHost />
     </div>
   );
 }

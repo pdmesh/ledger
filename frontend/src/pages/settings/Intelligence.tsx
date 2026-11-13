@@ -1,5 +1,6 @@
-import { Cloud, HardDrive, KeyRound, Terminal, Trash2 } from "lucide-react";
+import { Cloud, HardDrive, KeyRound, List, Terminal, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge, Button, Card, ErrorNote, Field, Input, Select, Toggle } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
@@ -45,7 +46,11 @@ export default function Intelligence() {
     try {
       const body = {
         providers: draft.providers.map(({ has_key: _hk, ...p }) => p),
-        routing: Object.fromEntries(Object.entries(draft.routing).filter(([, v]) => v.length)),
+        routing: Object.fromEntries(
+          Object.entries(draft.routing)
+            .map(([k, v]) => [k, [...new Set(v)]] as const)
+            .filter(([, v]) => v.length),
+        ),
         allow_cloud: draft.allow_cloud,
         share_identity_names: draft.share_identity_names,
         batch_size: draft.batch_size,
@@ -73,23 +78,29 @@ export default function Intelligence() {
     setError(null);
     // The backend tests the saved configuration, so save pending edits first.
     if (!(await save())) return;
-    setMsg(`Testing ${id}… (CLI providers can take up to a minute)`);
+    setMsg(null);
+    const t = toast.loading(`Testing ${id}…`, { description: "CLI providers can take up to a minute." });
     try {
       const r = await api.post<{ ok: boolean; error?: string; latency_ms?: number; model?: string }>(`/intelligence/providers/${id}/test`);
-      setMsg(r.ok ? `${id}: OK (${r.model}, ${r.latency_ms} ms)` : `${id}: ${r.error ?? "unexpected response"}`);
+      if (r.ok) toast.success(`${id} works`, { id: t, description: `${r.model} · ${((r.latency_ms ?? 0) / 1000).toFixed(1)} s` });
+      else toast.error(`${id} failed`, { id: t, description: r.error ?? "Unexpected response", duration: 10000 });
+      void execs.reload();
     } catch (e) {
-      setMsg(null);
-      setError(`${id}: ${(e as Error).message}`);
+      toast.error(`${id} failed`, { id: t, description: (e as Error).message, duration: 10000 });
     }
   };
   const detect = async (name: string, executable?: string | null) => {
     try {
-      setCli({ ...cli, [name]: await api.get(`/intelligence/cli/${name}`, executable ? { executable } : undefined) });
+      const r = await api.get<{ found: boolean; version?: string; path?: string }>(`/intelligence/cli/${name}`, executable ? { executable } : undefined);
+      setCli({ ...cli, [name]: r });
+      if (r.found) toast.success(`Found ${name}`, { description: [r.version, r.path].filter(Boolean).join(" · ") });
+      else toast.error(`${name} not found`, { description: "Install it and sign in from a terminal, or set the executable path." });
     } catch (e) {
-      setError((e as Error).message);
+      toast.error(`Could not check ${name}`, { description: (e as Error).message });
     }
   };
-  const route = (task: string) => draft.routing[task] ?? [];
+  // A provider appears at most once per chain: repeating it would just retry the same call.
+  const route = (task: string) => [...new Set(draft.routing[task] ?? [])];
   const setRoute = (task: string, idx: number, val: string) => {
     const chain = [...route(task)];
     if (val) chain[idx] = val;
@@ -157,7 +168,7 @@ export default function Intelligence() {
                 {p.kind !== "cli" ? (
                   <>
                     <Field label="Model" hint="LiteLLM model string, e.g. anthropic/<model>, ollama_chat/<model>.">
-                      <Input value={p.model ?? ""} onChange={(e) => upd(i, { model: e.target.value })} />
+                      <ModelField provider={p} onChange={(model) => upd(i, { model })} />
                     </Field>
                     <Field label="API base (optional)">
                       <Input value={p.api_base ?? ""} onChange={(e) => upd(i, { api_base: e.target.value || null })} />
@@ -168,8 +179,8 @@ export default function Intelligence() {
                     <Field label="Executable" hint="Official CLI, installed and logged in by you.">
                       <Input value={p.executable ?? ""} placeholder={p.cli ?? ""} onChange={(e) => upd(i, { executable: e.target.value || null })} />
                     </Field>
-                    <Field label="Model (optional)">
-                      <Input value={p.model ?? ""} onChange={(e) => upd(i, { model: e.target.value || null })} />
+                    <Field label="Model">
+                      <ModelField provider={p} onChange={(model) => upd(i, { model: model || null })} />
                     </Field>
                   </>
                 )}
@@ -212,16 +223,26 @@ export default function Intelligence() {
                 </td>
                 <td className="py-2">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {[...route(task), ""].map((pid, idx) => (
-                      <Select key={idx} value={pid} onChange={(e) => setRoute(task, idx, e.target.value)}>
-                        <option value="">{idx === 0 ? "—" : "+ fallback"}</option>
-                        {draft.providers.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.id}
-                          </option>
-                        ))}
-                      </Select>
-                    ))}
+                    {(() => {
+                      const chain = route(task);
+                      const slots = chain.length < draft.providers.length ? [...chain, ""] : chain;
+                      return slots.map((pid, idx) => (
+                        <span key={idx} className="flex items-center gap-1.5">
+                          {idx > 0 && <span className="text-[11px] text-fg-subtle">then</span>}
+                          <Select value={pid} onChange={(e) => setRoute(task, idx, e.target.value)} title={idx > 0 ? "Tried if the previous provider fails" : undefined}>
+                            <option value="">{idx === 0 ? "—" : pid ? "Remove" : "+ fallback"}</option>
+                            {draft.providers
+                              .filter((p) => p.id === pid || !chain.includes(p.id))
+                              .map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.id}
+                                  {p.model ? ` · ${p.model}` : ""}
+                                </option>
+                              ))}
+                          </Select>
+                        </span>
+                      ));
+                    })()}
                   </div>
                 </td>
               </tr>
@@ -267,5 +288,76 @@ export default function Intelligence() {
         </table>
       </Card>
     </div>
+  );
+}
+
+/** Model picker. CLIs get a dropdown whose first entry is the CLI's own default; API and
+ *  local providers get free text with suggestions (any LiteLLM model string is valid). */
+function ModelField({ provider: p, onChange }: { provider: ProviderConfig; onChange: (model: string) => void }) {
+  const [list, setList] = useState<{ models: string[]; source?: string; error?: string } | null>(null);
+  const prefix = p.model?.includes("/") ? p.model.split("/")[0] : "";
+  useEffect(() => {
+    let live = true;
+    const id = setTimeout(() => {
+      api
+        .post<{ models: string[]; source?: string; error?: string }>("/intelligence/models", { ...p, has_key: undefined })
+        .then((r) => live && setList(r))
+        .catch(() => live && setList(null));
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(id);
+    };
+    // Re-query only when what determines the list changes, not on every keystroke.
+  }, [p.id, p.kind, p.cli, p.api_base, prefix, p.has_key]);
+
+  const models = list?.models ?? [];
+  const [custom, setCustom] = useState(false);
+  if (p.kind === "cli") {
+    // Anything the CLI's --model flag accepts can be typed in; the list is suggestions.
+    if (custom || (list && p.model && !models.includes(p.model))) {
+      return (
+        <div className="flex gap-1.5">
+          <Input autoFocus={custom} value={p.model ?? ""} placeholder="Model name or alias" onChange={(e) => onChange(e.target.value)} />
+          <Button
+            variant="ghost"
+            size="sm"
+            title="Pick from the list"
+            onClick={() => {
+              setCustom(false);
+              if (p.model && !models.includes(p.model)) onChange("");
+            }}
+          >
+            <List size={13} />
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <Select
+        className="w-full"
+        value={p.model ?? ""}
+        onChange={(e) => (e.target.value === "__other" ? setCustom(true) : onChange(e.target.value))}
+      >
+        <option value="">CLI default</option>
+        {models.map((m) => (
+          <option key={m} value={m}>
+            {m}
+          </option>
+        ))}
+        <option value="__other">Other…</option>
+      </Select>
+    );
+  }
+  const listId = `models-${p.id}`;
+  return (
+    <>
+      <Input list={listId} value={p.model ?? ""} placeholder={list?.error ?? "provider/model"} onChange={(e) => onChange(e.target.value)} />
+      <datalist id={listId}>
+        {models.map((m) => (
+          <option key={m} value={m} />
+        ))}
+      </datalist>
+    </>
   );
 }

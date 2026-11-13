@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge, Button, Card, ErrorNote } from "../../components/ui";
+import { Badge, Button, Card, ErrorNote, confirmAction } from "../../components/ui";
 import { api } from "../../lib/api";
 import { bytes } from "../../lib/format";
 import { useApi } from "../../lib/hooks";
@@ -20,7 +20,14 @@ export default function DataPrivacy() {
     }
   };
   const restore = async () => {
-    if (!backup || !confirm("Replace the current ledger with this backup on next restart?")) return;
+    if (!backup) return;
+    const ok = await confirmAction({
+      title: "Restore this backup?",
+      body: "The current ledger will be replaced with this backup the next time the app starts.",
+      confirmLabel: "Restore on restart",
+      danger: true,
+    });
+    if (!ok) return;
     const r = await api.post<{ message: string }>("/restore", { name: backup.name });
     setMsg(r.message);
   };

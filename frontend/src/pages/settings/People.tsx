@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Badge, Button, Card, ErrorNote, Field, Input, Modal, Select } from "../../components/ui";
+import { Badge, Button, Card, ErrorNote, Field, Input, Modal, Select, confirmAction } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useApp } from "../../lib/context";
 import type { Identity } from "../../lib/types";
@@ -42,7 +42,13 @@ export default function People() {
   };
 
   const remove = async (i: Identity) => {
-    if (!confirm(`Remove ${i.display_name}? Their accounts remain but lose this owner.`)) return;
+    const ok = await confirmAction({
+      title: `Remove ${i.display_name}?`,
+      body: "Their accounts remain but lose this owner.",
+      confirmLabel: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/identities/${i.id}`);
     await refresh();
   };

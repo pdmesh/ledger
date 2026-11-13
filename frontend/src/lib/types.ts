@@ -139,7 +139,33 @@ export interface Rule {
   active: boolean;
 }
 
+export interface DocTotals {
+  inflow: string;
+  outflow: string;
+  count: number;
+}
+
+export interface TxnTotals {
+  currency: string;
+  inflow: string;
+  outflow: string;
+  net: string;
+  count: number;
+}
+
+export interface SourceTotals {
+  document_id: number | null;
+  name: string;
+  statement_start: string | null;
+  statement_end: string | null;
+  currency: string;
+  inflow: string;
+  outflow: string;
+  count: number;
+}
+
 export interface DocumentInfo {
+  totals?: DocTotals;
   id: number;
   original_filename: string;
   file_format: string;

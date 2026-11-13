@@ -159,8 +159,16 @@ def test_full_flow(client):
 
     # deleting a document removes its rows
     doc = next(d for d in docs if d["original_filename"].startswith("contoso"))
+    before = c.get("/api/transactions", params={"document_id": doc["id"]}).json()
+    assert before["total"] == 4
+    assert [src["document_id"] for src in before["by_source"]] == [doc["id"]]
+    listed = next(d for d in c.get("/api/documents").json() if d["id"] == doc["id"])
+    assert listed["totals"]["count"] == 4
     r = c.delete(f"/api/documents/{doc['id']}")
     assert r.json()["deleted_transactions"] == 4
+    after = c.get("/api/transactions", params={"document_id": doc["id"]}).json()
+    assert after["total"] == 0 and after["by_source"] == []
+    assert all(d["id"] != doc["id"] for d in c.get("/api/documents").json())
 
 
 def test_backup(client):

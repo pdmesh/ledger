@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from ledger.analytics.service import Filters, apply_filters
@@ -24,6 +24,7 @@ from ledger.models import (
     AIExecution,
     Category,
     ClassificationRecord,
+    Document,
     ReconciliationLink,
     Transaction,
     TransactionOverride,
@@ -57,6 +58,7 @@ def list_transactions(
     currency: str | None = None,
     reconciliation: str | None = None,  # linked|unlinked|duplicate
     method: list[str] = Query(default=[]),
+    document_id: list[int] = Query(default=[]),
     max_confidence: float | None = None,
     recurring: bool | None = None,
     q: str | None = None,
@@ -90,6 +92,8 @@ def list_transactions(
         query = query.where(Transaction.direction == direction)
     if method:
         query = query.where(Transaction.classification_method.in_(method))
+    if document_id:
+        query = query.where(Transaction.document_id.in_(document_id))
     if max_confidence is not None:
         query = query.where(Transaction.classification_confidence <= max_confidence)
     if recurring is not None:
@@ -112,10 +116,68 @@ def list_transactions(
             or_(Transaction.description_raw.ilike(like), Transaction.reference.ilike(like))
         )
     total = s.scalar(select(func.count()).select_from(query.subquery()))
+    summary = _totals(s, query)
     col = SORTS.get(sort, Transaction.txn_date)
     query = query.order_by(col.asc() if order == "asc" else col.desc(), Transaction.id.desc())
     rows = s.scalars(query.limit(min(limit, 1000)).offset(offset)).unique().all()
-    return {"total": total, "items": [ser.transaction(t) for t in rows]}
+    return {"total": total, "items": [ser.transaction(t) for t in rows], **summary}
+
+
+def _totals(s: Session, query: Any) -> dict[str, Any]:
+    """In/out sums of every row matching the filter (not just the page), per currency and
+    per source statement, in each transaction's own currency so they can be checked
+    against the statement."""
+    sub = query.subquery()
+    amt = sub.c.amount
+    inflow = func.sum(case((amt > 0, amt), else_=0))
+    outflow = func.sum(case((amt < 0, amt), else_=0))
+
+    def fmt(v: Any) -> str:
+        return str(Decimal(v or 0).quantize(Decimal("0.01")))
+
+    by_ccy = s.execute(
+        select(sub.c.currency, inflow, outflow, func.count()).group_by(sub.c.currency)
+    ).all()
+    by_doc = s.execute(
+        select(
+            sub.c.document_id,
+            Document.original_filename,
+            Document.statement_start,
+            Document.statement_end,
+            sub.c.currency,
+            inflow,
+            outflow,
+            func.count(),
+        )
+        .outerjoin(Document, Document.id == sub.c.document_id)
+        .group_by(sub.c.document_id, sub.c.currency)
+        .order_by(Document.statement_end.desc(), sub.c.document_id.desc())
+    ).all()
+    return {
+        "totals": [
+            {
+                "currency": c,
+                "inflow": fmt(i),
+                "outflow": fmt(o),
+                "net": fmt((i or 0) + (o or 0)),
+                "count": n,
+            }
+            for c, i, o, n in by_ccy
+        ],
+        "by_source": [
+            {
+                "document_id": d,
+                "name": name or "Manual entries",
+                "statement_start": st,
+                "statement_end": en,
+                "currency": c,
+                "inflow": fmt(i),
+                "outflow": fmt(o),
+                "count": n,
+            }
+            for d, name, st, en, c, i, o, n in by_doc
+        ],
+    }
 
 
 @router.get("/transactions/{txn_id}")

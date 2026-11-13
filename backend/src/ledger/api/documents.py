@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import tempfile
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import Session
 
 from ledger.api import serializers as ser
@@ -94,7 +95,34 @@ def scan_now(request: Request, s: Session = Depends(get_session)) -> dict[str, A
 @router.get("/documents")
 def list_documents(s: Session = Depends(get_session)) -> list[dict[str, Any]]:
     docs = s.scalars(select(Document).order_by(Document.id.desc())).all()
-    return [ser.document(d) for d in docs]
+    amt = Transaction.amount
+    # Live in/out totals per statement (every row it produced, duplicates included), in the
+    # statement's own currency, so a card statement's outflow can be checked against the bill.
+    totals = {
+        d: (i, o, n)
+        for d, i, o, n in s.execute(
+            select(
+                Transaction.document_id,
+                func.sum(case((amt > 0, amt), else_=0)),
+                func.sum(case((amt < 0, amt), else_=0)),
+                func.count(),
+            )
+            .where(Transaction.document_id.is_not(None))
+            .group_by(Transaction.document_id)
+        ).all()
+    }
+    q = Decimal("0.01")
+    out = []
+    for d in docs:
+        row = ser.document(d)
+        i, o, n = totals.get(d.id, (None, None, 0))
+        row["totals"] = {
+            "inflow": str(Decimal(i or 0).quantize(q)),
+            "outflow": str(Decimal(o or 0).quantize(q)),
+            "count": n,
+        }
+        out.append(row)
+    return out
 
 
 @router.get("/documents/summary")

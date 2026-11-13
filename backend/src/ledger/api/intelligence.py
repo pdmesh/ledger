@@ -19,6 +19,7 @@ from ledger.intelligence.providers import (
     build_provider,
     detect_cli,
     has_api_key,
+    list_models,
     set_api_key,
 )
 from ledger.intelligence.router import TASKS
@@ -132,6 +133,12 @@ def store_key(provider_id: str, body: KeyBody) -> dict[str, Any]:
     except Exception as e:  # keyring backend unavailable
         raise bad_request(f"Could not access the OS keychain: {type(e).__name__}") from e
     return {"has_key": has_api_key(provider_id)}
+
+
+@router.post("/models")
+def models(body: ProviderBody) -> dict[str, Any]:
+    """Model suggestions for a (possibly unsaved) provider configuration."""
+    return list_models(ProviderConfig.from_dict(body.model_dump()))
 
 
 @router.get("/cli/{name}")

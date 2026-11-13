@@ -2,7 +2,7 @@
 import clsx from "clsx";
 import { X } from "lucide-react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export const cn = clsx;
 
@@ -80,7 +80,11 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className={cn("h-9 rounded-md border border-border bg-surface px-2 text-sm focus:outline-2 focus:outline-accent", className)}
+      className={cn(
+        "h-9 appearance-none rounded-md border border-border bg-surface bg-[length:14px] bg-[position:right_0.5rem_center] bg-no-repeat pl-2.5 pr-8 text-sm focus:outline-2 focus:outline-accent",
+        "bg-[image:var(--select-chevron)]",
+        className,
+      )}
       {...props}
     >
       {children}
@@ -155,6 +159,63 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
         <div className="p-5">{children}</div>
       </div>
     </div>
+  );
+}
+
+// --------------------------------------------------------------------------------------
+// In-app confirmation. window.confirm() is not reliably shown inside the desktop webview
+// (it can return false without asking), so destructive actions use this instead.
+// --------------------------------------------------------------------------------------
+
+interface ConfirmRequest {
+  title: string;
+  body?: ReactNode;
+  confirmLabel?: string;
+  danger?: boolean;
+  resolve: (ok: boolean) => void;
+}
+
+let showConfirm: ((r: ConfirmRequest) => void) | null = null;
+
+/** Ask the user to confirm; resolves true only if they press the confirm button. */
+export function confirmAction(opts: Omit<ConfirmRequest, "resolve">): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!showConfirm) return resolve(false);
+    showConfirm({ ...opts, resolve });
+  });
+}
+
+/** Mount once near the app root. */
+export function ConfirmHost() {
+  const [req, setReq] = useState<ConfirmRequest | null>(null);
+  useEffect(() => {
+    showConfirm = (r) => setReq(r);
+    return () => {
+      showConfirm = null;
+    };
+  }, []);
+  const done = (ok: boolean) => {
+    req?.resolve(ok);
+    setReq(null);
+  };
+  useEffect(() => {
+    if (!req) return;
+    const h = (e: KeyboardEvent) => e.key === "Escape" && done(false);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  });
+  return (
+    <Modal open={!!req} onClose={() => done(false)} title={req?.title ?? ""}>
+      {req?.body && <div className="mb-5 text-sm text-fg-muted">{req.body}</div>}
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={() => done(false)}>
+          Cancel
+        </Button>
+        <Button autoFocus variant={req?.danger ? "danger" : "primary"} onClick={() => done(true)}>
+          {req?.confirmLabel ?? "Confirm"}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 

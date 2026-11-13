@@ -1,9 +1,10 @@
 import { FileUp, FolderSync, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useRef, useState, type DragEvent } from "react";
-import { Badge, Button, Card, Drawer, Empty, ErrorNote, Field, Input, Toggle, cn } from "../components/ui";
+import { toast } from "sonner";
+import { Badge, Button, Card, Drawer, Empty, ErrorNote, Field, Input, Toggle, cn, confirmAction } from "../components/ui";
 import { api } from "../lib/api";
 import { useApp } from "../lib/context";
-import { bytes, date, humanize } from "../lib/format";
+import { bytes, date, humanize, money } from "../lib/format";
 import { useApi, usePoll } from "../lib/hooks";
 import type { DocumentInfo, Job } from "../lib/types";
 
@@ -62,10 +63,28 @@ export default function ImportCentre() {
   };
 
   const remove = async (d: DocumentInfo) => {
-    if (!confirm(`Delete ${d.original_filename} and all ${d.stats.inserted ?? 0} transactions extracted from it?`)) return;
-    await api.del(`/documents/${d.id}`);
-    setSelected(null);
-    reloadAll();
+    const n = d.totals?.count ?? d.stats.inserted ?? 0;
+    const ok = await confirmAction({
+      title: `Delete ${d.original_filename}?`,
+      body: (
+        <>
+          This removes the statement, its archived file and <strong className="text-fg">{n} transaction{n === 1 ? "" : "s"}</strong> imported
+          from it, including any categories or notes you set on them. Matching transactions in other statements that were marked as duplicates of
+          these become active again. This can't be undone.
+        </>
+      ),
+      confirmLabel: n ? `Delete statement and ${n} transaction${n === 1 ? "" : "s"}` : "Delete statement",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const r = await api.del<{ deleted_transactions: number }>(`/documents/${d.id}`);
+      toast.success(`Deleted ${d.original_filename}`, { description: `${r.deleted_transactions} transaction${r.deleted_transactions === 1 ? "" : "s"} removed` });
+      setSelected(null);
+      reloadAll();
+    } catch (e) {
+      toast.error(`Could not delete ${d.original_filename}`, { description: (e as Error).message });
+    }
   };
 
   return (
@@ -144,6 +163,8 @@ export default function ImportCentre() {
                 <th className="px-3 py-2 font-medium">Identified as</th>
                 <th className="px-3 py-2 font-medium">Period</th>
                 <th className="px-3 py-2 font-medium">Transactions</th>
+                <th className="px-3 py-2 text-right font-medium">Money in</th>
+                <th className="px-3 py-2 text-right font-medium">Money out</th>
                 <th className="px-3 py-2 font-medium">Status</th>
               </tr>
             </thead>
@@ -168,6 +189,12 @@ export default function ImportCentre() {
                     {(d.stats.duplicates_across_documents ?? 0) > 0 && (
                       <span className="ml-1 text-xs text-fg-subtle">({d.stats.duplicates_across_documents} already known)</span>
                     )}
+                  </td>
+                  <td className="num whitespace-nowrap px-3 py-2 text-right text-positive">
+                    {d.totals?.count ? money(d.totals.inflow, d.currency ?? undefined) : "—"}
+                  </td>
+                  <td className="num whitespace-nowrap px-3 py-2 text-right">
+                    {d.totals?.count ? money(Math.abs(Number(d.totals.outflow)), d.currency ?? undefined) : "—"}
                   </td>
                   <td className="px-3 py-2">
                     <span className="flex flex-wrap items-center gap-1">
@@ -222,6 +249,12 @@ export default function ImportCentre() {
               <dd>{selected.extraction_method}</dd>
               <dt className="text-fg-muted">Currency</dt>
               <dd>{selected.currency ?? "—"}</dd>
+              <dt className="text-fg-muted">Money in / out</dt>
+              <dd className="num">
+                {selected.totals?.count
+                  ? `${money(selected.totals.inflow, selected.currency ?? undefined)} / ${money(Math.abs(Number(selected.totals.outflow)), selected.currency ?? undefined)} · ${selected.totals.count} rows`
+                  : "—"}
+              </dd>
               <dt className="text-fg-muted">Opening / closing</dt>
               <dd className="num">
                 {selected.opening_balance ?? "—"} / {selected.closing_balance ?? "—"}

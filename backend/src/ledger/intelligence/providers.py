@@ -277,6 +277,7 @@ class CLIProvider(Provider):
             latency = int((time.monotonic() - t0) * 1000)
             cost = None
             in_tok = out_tok = None
+            actual_model = None
             if spec["output"] == "claude_json":
                 try:
                     env = json.loads(proc.stdout)
@@ -285,6 +286,7 @@ class CLIProvider(Provider):
                 if env.get("is_error"):
                     raise ProviderError(f"claude CLI error: {str(env.get('result'))[:300]}")
                 text = str(env.get("result", ""))
+                actual_model = _primary_model(env.get("modelUsage"))
                 cost = env.get("total_cost_usd")
                 usage = env.get("usage") or {}
                 in_tok, out_tok = usage.get("input_tokens"), usage.get("output_tokens")
@@ -293,12 +295,106 @@ class CLIProvider(Provider):
         return ProviderResult(
             data=extract_json(text),
             text=text,
-            model=self.cfg.model or name,
+            model=actual_model or self.cfg.model or f"{name} (CLI default)",
             input_tokens=in_tok,
             output_tokens=out_tok,
             cost_usd=cost,
             latency_ms=latency,
         )
+
+
+def _primary_model(usage: Any) -> str | None:
+    """The model that did most of the work, from Claude Code's ``modelUsage`` envelope."""
+    if not isinstance(usage, dict) or not usage:
+        return None
+
+    def weight(item: tuple[str, Any]) -> float:
+        u = item[1] if isinstance(item[1], dict) else {}
+        return float(u.get("outputTokens") or 0) + float(u.get("inputTokens") or 0)
+
+    return max(usage.items(), key=weight)[0]
+
+
+# --------------------------------------------------------------------------------------
+# Model discovery for the settings UI
+# --------------------------------------------------------------------------------------
+
+# Aliases accepted by `claude --model`; each resolves to the latest model of that family.
+CLAUDE_CLI_ALIASES = ["opus", "sonnet", "haiku", "fable"]
+_DATED = re.compile(r"-\d{8}$|-\d{4}-\d{2}-\d{2}$")
+_NOT_CHAT = re.compile(
+    r"audio|realtime|tts|transcribe|image|search|embedding|moderation|dall-e|whisper"
+)
+
+
+def _catalog(provider: str) -> list[str]:
+    """LiteLLM's bundled (offline) model list for a provider, newest-looking first."""
+    try:
+        import litellm
+
+        names = list(litellm.models_by_provider.get(provider, []))
+    except Exception:
+        return []
+    names = [n.split("/", 1)[1] if n.startswith(provider + "/") else n for n in names]
+    names = [n for n in names if not _DATED.search(n) and not _NOT_CHAT.search(n)]
+    return sorted(set(names), reverse=True)
+
+
+def _http_json(url: str, headers: dict[str, str] | None = None, timeout: float = 4) -> Any:
+    import urllib.request
+
+    req = urllib.request.Request(url, headers=headers or {})
+    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - user-configured URL
+        return json.loads(r.read())
+
+
+def list_models(cfg: ProviderConfig) -> dict[str, Any]:
+    """Models to offer for a provider.
+
+    CLIs have no "list models" command, so they get their documented aliases plus LiteLLM's
+    catalog for that vendor. Local servers are asked directly (Ollama ``/api/tags``, or an
+    OpenAI-compatible ``/models``). Cloud APIs are asked via LiteLLM when a key is stored,
+    falling back to LiteLLM's bundled catalog.
+    """
+    if cfg.kind == "cli":
+        if cfg.cli == "claude":
+            return {"models": CLAUDE_CLI_ALIASES + _catalog("anthropic"), "source": "catalog"}
+        if cfg.cli == "codex":
+            gpt = [m for m in _catalog("openai") if m.startswith(("gpt-5", "o3", "o4"))]
+            return {"models": gpt, "source": "catalog"}
+        return {"models": [], "source": "none"}
+
+    prefix = (cfg.model or "").split("/", 1)[0] if "/" in (cfg.model or "") else ""
+    if cfg.kind == "local":
+        try:
+            if prefix.startswith("ollama"):
+                base = (cfg.api_base or "http://127.0.0.1:11434").rstrip("/")
+                tags = _http_json(f"{base}/api/tags")
+                names = [f"{prefix}/{m['name']}" for m in tags.get("models", [])]
+            else:
+                base = (cfg.api_base or "").rstrip("/")
+                data = _http_json(f"{base}/models")
+                names = [f"{prefix or 'openai'}/{m['id']}" for m in data.get("data", [])]
+            return {"models": names, "source": "server"}
+        except Exception as e:
+            return {"models": [], "source": "server", "error": f"Server not reachable: {e}"}
+
+    if not prefix:
+        return {"models": [], "source": "none"}
+    key = get_api_key(cfg.id)
+    if key:
+        try:
+            from litellm import get_valid_models
+
+            live = get_valid_models(
+                check_provider_endpoint=True, custom_llm_provider=prefix, api_key=key
+            )
+            if live:
+                names = [m if m.startswith(prefix + "/") else f"{prefix}/{m}" for m in live]
+                return {"models": sorted(set(names), reverse=True), "source": "provider"}
+        except Exception:
+            pass
+    return {"models": [f"{prefix}/{m}" for m in _catalog(prefix)], "source": "catalog"}
 
 
 def build_provider(cfg: ProviderConfig) -> Provider:
