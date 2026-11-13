@@ -124,8 +124,9 @@ export const api = {
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   del: <T>(path: string) => request<T>("DELETE", path),
-  async fileUrl(path: string): Promise<string> {
-    const cfg = await backendConfig();
-    return `${cfg.base}/api${path}${cfg.token ? `?token=${encodeURIComponent(cfg.token)}` : ""}`;
-  },
 };
+
+/** Open an archived statement in the OS's default viewer (the backend runs on this machine). */
+export async function openDocument(id: number): Promise<void> {
+  await request("POST", `/documents/${id}/open`);
+}

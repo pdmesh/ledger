@@ -9,7 +9,7 @@ tested · 🟡 = partial · ⬜ = not started.
 | Local financial database | ✅ | SQLite (WAL) with Alembic migrations and a drift test. |
 | Country and currency configuration | ✅ | Onboarding, presets, and base, account and transaction currencies. |
 | Multiple household identities and aliases | ✅ | Ownership is inferred from statement holder blocks. |
-| Bank and credit-card statement ingestion (CSV, XLSX, XLS, PDF) | ✅ | Header detection, wrapped descriptions, sign resolution from running balance or Cr/Dr markers, per-document card polarity. |
+| Bank and credit-card statement ingestion (CSV, XLSX, XLS, PDF) | ✅ | Generic header/table/line detection first, then the routed AI model for anything it can't read. Password-protected PDFs (keychain, auto-retry with remembered passwords) and scanned PDFs (read by a multimodal model) are supported. No per-bank parsers by design. |
 | Canonical ledger with provenance | ✅ | Every transaction records its page, sheet, row or line and the extracted cells. |
 | AI-powered classification | ✅ | Batched, validated, routed per task, with deterministic fallback. |
 | Configurable taxonomy with propagation | ✅ | Rename, describe, move, merge, add and disable, with versioned propagation. |
@@ -24,27 +24,44 @@ tested · 🟡 = partial · ⬜ = not started.
 | Manual corrections and overrides | ✅ | Pinning, learning, unpin, and link confirm or reject. |
 | Multiple API providers | ✅ | Through LiteLLM. Keys are stored in the OS keychain. |
 | Local LLM support (P1) | ✅ | Ollama and OpenAI-compatible endpoints. |
-| CLI-based model integrations (P1) | 🟡 | Claude Code and Codex adapters exist. CLI flags are configurable but have not been verified against every CLI release. |
+| CLI-based model integrations (P1) | ✅ | Verified with Claude Code 2.1.318 (text and page images: a 3-page card statement read from images alone matched the text import exactly) and Codex 0.147.0 (text). Detect/Test in Settings; the model actually used is recorded. Codex's `--image` path has not been exercised against a real statement yet. |
 | Folder monitoring (P1) | ✅ | Polling watcher with a seen-file index. |
-| Manual transaction entry (P1) | 🟡 | The API exists; there is no UI form yet. |
+| Manual transaction entry (P1) | ✅ | "Add" on Transactions; manual entries can be deleted from their detail panel. |
 | Advanced multi-currency conversion (P1) | 🟡 | Rates are entered manually. There is no automatic rate source. |
 | Natural language analytics (P1) | 🟡 | Answers come from aggregated facts only. There is no query planning over raw rows. |
 
-## Known gaps and next steps
+## Resolved since v0.1
 
-1. **OCR for scanned PDFs.** Wire Tesseract (or a vision model through the `extract`
-   task).
-2. **Password-protected PDFs.** The plumbing exists in `read_pdf`, but there is no prompt or
-   keychain flow in the UI yet.
-3. **Real-format corpus.** Recreate the layouts of common banks with synthetic values,
-   measure extraction accuracy, and add per-institution adapters where generic detection
-   falls short.
-4. **Evaluation harness.** Compare models against a labelled synthetic dataset, as described
-   in PRD section 7.5. The router's injectable provider factory is the hook for this.
-5. **Judge model.** The `judge` task is routable, but low-confidence second opinions are not
-   invoked yet.
-6. **Opening links from the desktop shell.** Add `tauri-plugin-opener`, so that "open
-   original document" uses the OS viewer.
-7. **Code signing and auto-update** for macOS distribution.
-8. **Performance.** Benchmark with more than 100k transactions. The reconciliation
-   candidate search is windowed but still in-memory per run.
+- **Scanned PDFs.** No OCR engine: pages are rendered with pypdfium2 and read by a
+  multimodal model (LiteLLM vision models, Claude Code, Codex), which also returns the
+  statement header. Needs an `extract` route to a model that accepts images. Up to 12
+  pages are read; longer statements get a warning naming how many were skipped.
+- **CLI sandboxing.** Claude Code runs with `--restricted --strict-mcp-config`: no tools
+  for text prompts, and only `Read` (confined to its temporary directory, verified) for
+  page images. Side effect: your Claude Code settings files aren't read, so "CLI default"
+  is Claude Code's built-in default model; pick a model in Settings to control cost.
+- **Password-protected PDFs.** Locked statements wait as "locked" in the Import Centre;
+  the password is checked immediately, stored only in the OS keychain, and remembered
+  passwords are tried on every new protected file (folder imports included).
+- **Opening originals.** The backend hands files to the OS viewer (or reveals backups in
+  Finder/Explorer), in the desktop app and in a browser alike. No Tauri plugin needed.
+- **API token in URLs.** Removed: the token is accepted only in the `Authorization`
+  header. `backend.log` also redacts any `token=` and is owner-readable only.
+- **Reconciliation review.** A top-level page with a review queue, plus help tooltips
+  across the app.
+
+## Known gaps
+
+1. **macOS build, code signing, notarization and auto-update.** The `.app`/`.dmg`
+   targets are configured but no macOS build has been made yet. Signing and notarization
+   need an Apple Developer ID, which only the owner can provide.
+2. **Judge model.** The `judge` task is routable, but low-confidence second opinions are
+   not invoked yet. Not needed for correctness; useful once there is more data.
+3. **Evaluation harness.** Compare models against a labelled synthetic dataset (PRD 7.5).
+   The router's injectable provider factory is the hook. Worth doing before tuning
+   prompts or picking cheaper models.
+4. **Automatic FX rates.** Rates are entered by hand; an online source would be the first
+   network call the app makes on its own, so it needs an explicit opt-in design.
+5. **Natural-language analytics over raw rows.** Answers come from aggregated facts only.
+6. **Performance.** Benchmark with more than 100k transactions. The reconciliation
+   candidate search is windowed but still in memory per run.

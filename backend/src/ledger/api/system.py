@@ -190,6 +190,21 @@ def create_backup(rt: RuntimeSettings = Depends(get_rt)) -> dict[str, Any]:
     return {"path": str(out), "name": out.name, "size_bytes": out.stat().st_size}
 
 
+@router.post("/backup/{name}/reveal")
+def reveal_backup(name: str, rt: RuntimeSettings = Depends(get_rt)) -> dict[str, Any]:
+    """Show the backup file in Finder/Explorer."""
+    from ledger import desktop
+
+    p = (rt.backup_dir / name).resolve()
+    if p.parent != rt.backup_dir.resolve() or not p.exists():
+        raise not_found("backup")
+    try:
+        desktop.open_path(p, reveal=True)
+    except desktop.OpenError as e:
+        raise bad_request(str(e)) from e
+    return {"ok": True}
+
+
 @router.get("/backup/{name}")
 def download_backup(name: str, rt: RuntimeSettings = Depends(get_rt)) -> FileResponse:
     p = (rt.backup_dir / name).resolve()

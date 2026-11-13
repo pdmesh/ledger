@@ -170,7 +170,7 @@ export interface DocumentInfo {
   original_filename: string;
   file_format: string;
   size_bytes: number;
-  status: "queued" | "processing" | "processed" | "failed" | "duplicate";
+  status: "queued" | "processing" | "processed" | "failed" | "duplicate" | "needs_password";
   error: string | null;
   warnings: string[];
   institution: string | null;

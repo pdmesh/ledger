@@ -40,7 +40,10 @@ export default function DataPrivacy() {
           <li>Imported statements are copied, unmodified, into a local archive next to it.</li>
           <li>Only the last four digits of account and card numbers are stored.</li>
           <li>API keys are kept in the operating system keychain, never in the database.</li>
-          <li>Nothing leaves this device unless you enable a cloud or CLI provider in Intelligence settings.</li>
+          <li>
+            Nothing leaves this device unless you enable a cloud or CLI provider in Intelligence settings. Then descriptions and amounts are
+            sent for categorisation, and a whole statement (as text or page images) when AI has to read it.
+          </li>
           <li>Deleting a document in the Import Centre removes its file and every transaction extracted from it.</li>
         </ul>
       </Card>
@@ -50,8 +53,8 @@ export default function DataPrivacy() {
           <Button onClick={makeBackup}>Create backup</Button>
           {backup && (
             <>
-              <Button variant="outline" onClick={async () => window.open(await api.fileUrl(`/backup/${backup.name}`), "_blank")}>
-                Download ({bytes(backup.size_bytes)})
+              <Button variant="outline" onClick={() => api.post(`/backup/${backup.name}/reveal`).catch((e) => setError((e as Error).message))}>
+                Show in folder ({bytes(backup.size_bytes)})
               </Button>
               <Button variant="ghost" onClick={restore}>
                 Restore this backup…

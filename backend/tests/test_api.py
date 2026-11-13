@@ -53,6 +53,21 @@ def test_auth_required(tmp_path):
     with TestClient(create_app(rt)) as c:
         assert c.get("/api/health").status_code == 200
         assert c.get("/api/settings").status_code == 401
+        # tokens in URLs are not accepted (they leak into logs and history)
+        assert c.get("/api/settings", params={"token": "x"}).status_code == 401
+        assert c.get("/api/settings", headers={"Authorization": "Bearer x"}).status_code == 200
+
+
+def test_open_original_uses_os_viewer(client, monkeypatch):
+    c = client
+    setup_household(c)
+    upload(c, "northwind_savings_2026-01.csv")
+    doc = c.get("/api/documents").json()[0]
+    opened = []
+    monkeypatch.setattr("ledger.desktop.open_path", lambda p, reveal=False: opened.append(p))
+    assert c.post(f"/api/documents/{doc['id']}/open").json() == {"ok": True}
+    assert opened and opened[0].suffix == ".csv" and opened[0].exists()
+    assert c.post("/api/documents/9999/open").status_code == 404
 
 
 def test_full_flow(client):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import shutil
 from collections import Counter
 from dataclasses import dataclass
@@ -19,9 +20,12 @@ from ledger.classification.engine import Classifier, detect_recurring
 from ledger.config import current_version, get_setting
 from ledger.fx import apply_base_amount, base_currency
 from ledger.identity import resolve_account_owners
+from ledger.ingestion import passwords
 from ledger.ingestion.extract import (
     NO_ROWS_WARNING,
     ExtractionError,
+    NoTextLayer,
+    PasswordRequired,
     detect_format,
     extract_statement,
     post_validate,
@@ -34,7 +38,11 @@ from ledger.ingestion.parsing import (
     parse_date,
 )
 from ledger.intelligence.router import IntelligenceRouter, NoProviderAvailable, ProviderFactory
-from ledger.intelligence.tasks import extract_rows_from_text
+from ledger.intelligence.tasks import (
+    VISION_MAX_PAGES,
+    extract_rows_from_images,
+    extract_rows_from_text,
+)
 from ledger.models import Account, Document, ImportBatch, Institution, Transaction
 from ledger.settings import RuntimeSettings
 from ledger.text import normalize_description
@@ -201,23 +209,72 @@ def _fingerprint(base: str, occurrence: int) -> str:
     return hashlib.sha256(f"{base}|{occurrence}".encode()).hexdigest()
 
 
+def _apply_ai_metadata(st: ParsedStatement, meta: dict[str, Any]) -> None:
+    """Fill statement header fields the model read off a scanned page, where empty."""
+    md = st.metadata
+
+    def d(v: Any) -> date | None:
+        try:
+            return date.fromisoformat(str(v)) if v else None
+        except ValueError:
+            return None
+
+    md.institution = md.institution or (
+        str(meta["institution"]) if meta.get("institution") else None
+    )
+    acct_type = meta.get("account_type")
+    if not md.account_type and acct_type in ("savings", "current", "credit_card", "other"):
+        md.account_type = acct_type
+        if acct_type == "credit_card":
+            md.document_type = md.document_type or "credit_card_statement"
+    last4 = re.sub(r"\D", "", str(meta.get("account_number_last4") or ""))[-4:]
+    md.account_number_last4 = md.account_number_last4 or (last4 if len(last4) == 4 else None)
+    md.holder_text = md.holder_text or (
+        str(meta["holder_name"]) if meta.get("holder_name") else None
+    )
+    ccy = str(meta.get("currency") or "").upper()
+    md.currency = md.currency or (ccy if re.fullmatch(r"[A-Z]{3}", ccy) else None)
+    md.period_start = md.period_start or d(meta.get("period_start"))
+    md.period_end = md.period_end or d(meta.get("period_end"))
+    md.evidence["read_by"] = "multimodal model"
+
+
 def _llm_extract(
-    session: Session, st: ParsedStatement, path: Path, pf: ProviderFactory | None
+    session: Session,
+    st: ParsedStatement,
+    path: Path,
+    pf: ProviderFactory | None,
+    *,
+    password: str | None = None,
+    scanned: bool = False,
 ) -> None:
     from ledger.ingestion.pdf import read_pdf
 
     if not IntelligenceRouter(session, pf).available("extract"):
         st.warnings.append("No intelligence provider routed for 'extract'; cannot fall back")
         return
-    text = (
-        read_pdf(path).full_text
-        if path.suffix.lower() == ".pdf"
-        else path.read_text(errors="replace")
-    )
+    is_card = st.metadata.account_type == "credit_card"
     try:
-        rows, _ = extract_rows_from_text(
-            session, text, is_card=st.metadata.account_type == "credit_card", provider_factory=pf
-        )
+        if scanned:
+            from ledger.ingestion.pdf import render_pages
+
+            with render_pages(path, password, max_pages=VISION_MAX_PAGES) as (images, total):
+                rows, meta = extract_rows_from_images(
+                    session, images, is_card=is_card, provider_factory=pf
+                )
+            if total > len(images):
+                st.warnings.append(
+                    f"Only the first {len(images)} of {total} pages were read; "
+                    "transactions on later pages are missing"
+                )
+            _apply_ai_metadata(st, meta)
+        else:
+            text = (
+                read_pdf(path, password).full_text
+                if path.suffix.lower() == ".pdf"
+                else path.read_text(errors="replace")
+            )
+            rows, _ = extract_rows_from_text(session, text, is_card=is_card, provider_factory=pf)
     except NoProviderAvailable as e:
         st.warnings.append(f"AI extraction failed: {e}")
         return
@@ -263,7 +320,17 @@ def process_document(
     session.flush()
     path = rt.data_dir / doc.archive_path
     opts = parse_options(session)
+    password: str | None = None
+    if doc.file_format == "pdf":
+        opens, password = passwords.find_password(path, doc.sha256)
+        if not opens:
+            # Wait for the user; nothing is sent anywhere until the file can be opened.
+            doc.status = "needs_password"
+            doc.error = "This PDF is password-protected. Enter its password to import it."
+            doc.warnings = []
+            return {"status": "needs_password"}
     err = ""
+    scanned = False
     st: ParsedStatement | None
     try:
         st = extract_statement(
@@ -272,14 +339,19 @@ def process_document(
             opts,
             filename=doc.original_filename,
             known_institutions=_known_institutions(session),
+            pdf_password=password,
         )
+    except PasswordRequired:
+        # pdfium opened it with this password but the text extractor can't decrypt this
+        # encryption scheme: read the rendered pages instead of asking again.
+        st, err, scanned = None, "PDF encryption not supported by the text extractor", True
     except ExtractionError as e:
-        st, err = None, str(e)
+        st, err, scanned = None, str(e), isinstance(e, NoTextLayer)
     if st is None or not st.rows:
         if st is None:
             st = ParsedStatement([], "", StatementMetadata(), "none", [err])
         if use_ai:
-            _llm_extract(session, st, path, provider_factory)
+            _llm_extract(session, st, path, provider_factory, password=password, scanned=scanned)
         if not st.rows:
             doc.status = "failed"
             doc.error = "; ".join(st.warnings) or "No transactions found"

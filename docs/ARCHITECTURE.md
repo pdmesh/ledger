@@ -144,8 +144,18 @@ Jobs are coalesced with dedupe keys, so a burst of edits results in one recomput
    - openpyxl (MIT) for XLSX and xlrd (BSD) for legacy XLS.
    - The standard-library `csv` module, with dialect sniffing.
    - PyMuPDF is AGPL, so it was avoided to keep licensing open.
-   - OCR (Tesseract) is pluggable but not yet wired. Scanned PDFs fail with a clear message,
-     or go through the LLM extraction fallback if you route one.
+   - No hand-written per-bank parsers and no OCR engine. Generic table/line parsing runs
+     first; anything it can't read goes to the routed `extract` model as text. Scanned
+     (image-only) PDFs are rendered to page images with pypdfium2 and read by a multimodal
+     model instead of Tesseract: LiteLLM vision models get them as image parts, Claude Code
+     reads them from its working directory (`--tools Read --restricted`, which confines
+     Read to that directory; text-only calls get `--tools ""`), and Codex gets them via
+     `--image`. Codex's read-only sandbox does not confine reads to the directory. The model also returns the statement header (institution,
+     account, period, currency), which a text layer would otherwise provide.
+   - Password-protected PDFs: passwords live only in the OS keychain (one per document for
+     re-processing, plus a list the user chose to remember that is tried on every new
+     protected file). The archive keeps the original, still-encrypted file. A document that
+     no known password opens waits in `needs_password` and nothing is sent to any model.
 5. **CLI structured output.** Each adapter declares its arguments and output convention:
    Claude Code's JSON envelope and Codex's last-message file. The prompt is sent on stdin
    and asks for JSON only. The reply then goes through the same tolerant JSON extraction

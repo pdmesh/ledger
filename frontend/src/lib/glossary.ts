@@ -48,11 +48,13 @@ export const GLOSSARY = {
 
   // Intelligence
   allow_cloud:
-    "Cloud APIs and CLI tools (Claude Code, Codex) receive transaction descriptions and amounts. Local models (Ollama etc.) are always allowed.",
-  share_names: "Off: household members' names are replaced by “Person 1”, “Person 2” before anything is sent to a cloud provider.",
+    "Cloud APIs and CLI tools (Claude Code, Codex) receive transaction descriptions and amounts for categorisation. When a statement has to be read by AI (layouts the built-in parser can't handle, or scanned PDFs), the whole statement is sent as it is: names, account numbers and addresses included. Local models (Ollama etc.) are always allowed.",
+  share_names:
+    "Off: household members' names are replaced by “Person 1”, “Person 2” in categorisation and matching requests. This can't apply when a whole statement is read by AI: the statement text or page images are sent unchanged.",
   task_routing:
     "Which provider handles each kind of work. Providers are tried in order: if one fails, times out or returns unusable output, the next one (“then …”) is tried.",
-  cli_default: "Leave on CLI default to use whatever model the CLI itself is set to.",
+  cli_default:
+    "CLI default is the CLI's built-in default model. The app runs Claude Code sandboxed, which skips your Claude Code settings files, so a model set there isn't used. Pick a model here to control which one (and its cost).",
 
   // Overview metrics
   consumption: "Spending on goods and services, after refunds. Excludes transfers, card bill payments and investments.",
@@ -65,6 +67,10 @@ export const GLOSSARY = {
   money_in_out:
     "Totals of the rows imported from this statement. For a card, “Money out” should match the purchases on the bill; “Money in” is usually last month's payment and refunds.",
   doc_duplicate: "This exact file was imported before, so nothing new was added.",
+  needs_password:
+    "This PDF is password-protected. Enter its password to import it. Nothing is read or sent anywhere until then.",
+  remember_password:
+    "Banks and card issuers usually reuse one password per person, so remembered passwords are tried automatically on future protected statements. They're kept in your OS keychain, never in the ledger database.",
 } as const;
 
 export type GlossaryKey = keyof typeof GLOSSARY;

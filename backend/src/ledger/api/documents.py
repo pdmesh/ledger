@@ -9,11 +9,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import Session
 
+from ledger import desktop
 from ledger.api import serializers as ser
 from ledger.api.deps import bad_request, get_rt, get_session, not_found, notify_worker
+from ledger.ingestion import passwords
 from ledger.ingestion.extract import ExtractionError
 from ledger.ingestion.service import new_batch, register_file
 from ledger.jobs import enqueue
@@ -167,6 +170,66 @@ def document_file(
     if rt.data_dir.resolve() not in path.parents or not path.exists():
         raise not_found("file")
     return FileResponse(path, filename=d.original_filename)
+
+
+@router.post("/documents/{doc_id}/open")
+def open_document(
+    doc_id: int, s: Session = Depends(get_session), rt: RuntimeSettings = Depends(get_rt)
+) -> dict[str, Any]:
+    """Open the archived original in the OS's default viewer."""
+    d = s.get(Document, doc_id)
+    if d is None:
+        raise not_found("document")
+    path = (rt.data_dir / d.archive_path).resolve()
+    if rt.data_dir.resolve() not in path.parents:
+        raise not_found("file")
+    try:
+        desktop.open_path(path)
+    except desktop.OpenError as e:
+        raise bad_request(str(e)) from e
+    return {"ok": True}
+
+
+class PasswordBody(BaseModel):
+    password: str
+    remember: bool = True
+
+
+@router.post("/documents/{doc_id}/password")
+def unlock(
+    doc_id: int,
+    body: PasswordBody,
+    request: Request,
+    s: Session = Depends(get_session),
+    rt: RuntimeSettings = Depends(get_rt),
+) -> dict[str, Any]:
+    """Check a PDF password now, keep it in the OS keychain and import the statement.
+
+    The password is never written to the database, the job queue or the logs.
+    """
+    d = s.get(Document, doc_id)
+    if d is None:
+        raise not_found("document")
+    if d.file_format != "pdf" or d.status != "needs_password":
+        raise bad_request("this document isn't waiting for a password")
+    if not passwords.opens_with(rt.data_dir / d.archive_path, body.password):
+        raise bad_request("That password doesn't open this PDF")
+    stored = passwords.set_document_password(d.sha256, body.password)
+    if body.remember:
+        passwords.remember_password(body.password)
+    d.status, d.error = "queued", None
+    enqueue(s, "process_document", {"document_id": d.id})
+    # Other locked statements often share the password; give them another try.
+    retried = 0
+    if body.remember:
+        for other in s.scalars(
+            select(Document).where(Document.status == "needs_password", Document.id != d.id)
+        ):
+            other.status, other.error = "queued", None
+            enqueue(s, "process_document", {"document_id": other.id})
+            retried += 1
+    notify_worker(request)
+    return {"ok": True, "stored_in_keychain": stored, "retried_others": retried}
 
 
 @router.post("/documents/{doc_id}/reprocess")

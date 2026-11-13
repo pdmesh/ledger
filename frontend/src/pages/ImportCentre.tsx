@@ -1,8 +1,8 @@
-import { FileUp, FolderSync, RefreshCw, Trash2 } from "lucide-react";
-import { useCallback, useRef, useState, type DragEvent } from "react";
+import { FileUp, FolderSync, KeyRound, RefreshCw, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { toast } from "sonner";
-import { Badge, Button, Card, Drawer, Empty, ErrorNote, Field, Help, Input, Term, Toggle, cn, confirmAction } from "../components/ui";
-import { api } from "../lib/api";
+import { Badge, Button, Card, Drawer, Empty, ErrorNote, Field, Help, Input, Modal, Term, Toggle, cn, confirmAction } from "../components/ui";
+import { api, openDocument } from "../lib/api";
 import { useApp } from "../lib/context";
 import { bytes, date, humanize, money } from "../lib/format";
 import { useApi, usePoll } from "../lib/hooks";
@@ -12,6 +12,7 @@ const STATUS_TONE: Record<DocumentInfo["status"], "neutral" | "positive" | "nega
   queued: "neutral",
   processing: "accent",
   processed: "positive",
+  needs_password: "warning",
   failed: "negative",
   duplicate: "warning",
 };
@@ -25,6 +26,7 @@ export default function ImportCentre() {
   const [notes, setNotes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<DocumentInfo | null>(null);
+  const [unlocking, setUnlocking] = useState<DocumentInfo | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [folder, setFolder] = useState(settings?.ingestion.watch_folder ?? "");
 
@@ -36,6 +38,15 @@ export default function ImportCentre() {
     if (!busy) void refresh();
   }, [docs, jobs, summary, busy, refresh]);
   usePoll(reloadAll, busy, 1500);
+  // When processing finishes, pick up accounts/identities it created.
+  const wasBusy = useRef(busy);
+  useEffect(() => {
+    if (wasBusy.current && !busy) {
+      void refresh();
+      void docs.reload();
+    }
+    wasBusy.current = busy;
+  }, [busy, refresh, docs]);
 
   const upload = async (files: FileList | File[]) => {
     const fd = new FormData();
@@ -136,7 +147,7 @@ export default function ImportCentre() {
         <div className="flex flex-wrap gap-2 text-xs">
           {Object.entries(summary.data.documents).map(([k, v]) => (
             <Badge key={k} tone={STATUS_TONE[k as DocumentInfo["status"]] ?? "neutral"}>
-              {v} {k}
+              {v} {k === "needs_password" ? "locked" : k}
             </Badge>
           ))}
           {Object.entries(summary.data.reconciliation).map(([k, v]) => (
@@ -202,9 +213,21 @@ export default function ImportCentre() {
                   </td>
                   <td className="px-3 py-2">
                     <span className="flex flex-wrap items-center gap-1">
-                      <Term term={d.status === "duplicate" ? "doc_duplicate" : undefined}>
-                        <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge>
+                      <Term term={d.status === "duplicate" ? "doc_duplicate" : d.status === "needs_password" ? "needs_password" : undefined}>
+                        <Badge tone={STATUS_TONE[d.status]}>{d.status === "needs_password" ? "locked" : d.status}</Badge>
                       </Term>
+                      {d.status === "needs_password" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setUnlocking(d);
+                          }}
+                        >
+                          <KeyRound size={12} /> Enter password
+                        </Button>
+                      )}
                       {d.warnings.length > 0 && <Badge tone="warning">{d.warnings.length} warning{d.warnings.length > 1 ? "s" : ""}</Badge>}
                     </span>
                   </td>
@@ -232,6 +255,8 @@ export default function ImportCentre() {
           ))}
         </ul>
       </Card>
+
+      <UnlockDialog doc={unlocking} onClose={() => setUnlocking(null)} onDone={reloadAll} />
 
       <Drawer open={!!selected} onClose={() => setSelected(null)} title={selected?.original_filename ?? ""}>
         {selected && (
@@ -275,7 +300,7 @@ export default function ImportCentre() {
               <pre className="overflow-x-auto rounded bg-muted px-2 py-1.5 text-[11px]">{JSON.stringify(selected.stats, null, 2)}</pre>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={async () => window.open(await api.fileUrl(`/documents/${selected.id}/file`), "_blank")}>
+              <Button variant="outline" size="sm" onClick={() => openDocument(selected.id).catch((e) => toast.error("Could not open the statement", { description: (e as Error).message }))}>
                 Open original
               </Button>
               <Button variant="outline" size="sm" onClick={async () => { await api.post(`/documents/${selected.id}/reprocess`).catch((e) => setError(e.message)); setSelected(null); reloadAll(); }}>
@@ -289,5 +314,69 @@ export default function ImportCentre() {
         )}
       </Drawer>
     </div>
+  );
+}
+
+function UnlockDialog({ doc, onClose, onDone }: { doc: DocumentInfo | null; onClose: () => void; onDone: () => void }) {
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const close = () => {
+    setPassword("");
+    setError(null);
+    onClose();
+  };
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!doc || !password) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.post<{ stored_in_keychain: boolean; retried_others: number }>(`/documents/${doc.id}/password`, { password, remember });
+      toast.success(`Unlocked ${doc.original_filename}`, {
+        description: [
+          "Importing now.",
+          r.retried_others ? `Retrying ${r.retried_others} other locked statement${r.retried_others === 1 ? "" : "s"} with it.` : "",
+          r.stored_in_keychain ? "" : "The OS keychain wasn't available, so the password is only kept until the app restarts.",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      });
+      close();
+      onDone();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal open={!!doc} onClose={close} title={`Unlock ${doc?.original_filename ?? ""}`}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-sm text-fg-muted">This statement is password-protected. The password is checked on this device and stored only in your OS keychain.</p>
+        <Field label="PDF password">
+          <Input type="password" autoFocus autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </Field>
+        <Toggle
+          checked={remember}
+          onChange={setRemember}
+          label={
+            <span className="flex items-center gap-1">
+              Try this password on future protected statements <Help term="remember_password" />
+            </span>
+          }
+        />
+        <ErrorNote error={error} />
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={close}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!password || busy}>
+            {busy ? "Checking…" : "Unlock and import"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }

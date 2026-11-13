@@ -1,11 +1,12 @@
 import { ExternalLink, Pin } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { api } from "../lib/api";
+import { toast } from "sonner";
+import { api, openDocument } from "../lib/api";
 import { categoryPath, useApp } from "../lib/context";
 import { date, humanize, money } from "../lib/format";
 import { useApi } from "../lib/hooks";
 import type { Merchant, TxnDetail } from "../lib/types";
-import { Badge, Button, Card, Confidence, ErrorNote, Select, Toggle } from "./ui";
+import { Badge, Button, Card, Confidence, ErrorNote, Select, Toggle, confirmAction } from "./ui";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -23,7 +24,17 @@ const LINK_LABEL: Record<string, string> = {
   duplicate: "Duplicate",
 };
 
-export function TransactionDetail({ id, onChanged, onOpen }: { id: number; onChanged: () => void; onOpen: (id: number) => void }) {
+export function TransactionDetail({
+  id,
+  onChanged,
+  onOpen,
+  onDeleted,
+}: {
+  id: number;
+  onChanged: () => void;
+  onOpen: (id: number) => void;
+  onDeleted?: () => void;
+}) {
   const { categories, identities, accounts } = useApp();
   const d = useApi<TxnDetail>(`/transactions/${id}`);
   const merchants = useApi<{ items: Merchant[] }>("/merchants", { limit: 500 });
@@ -53,9 +64,30 @@ export function TransactionDetail({ id, onChanged, onOpen }: { id: number; onCha
     await d.reload();
     onChanged();
   };
+  const removeManual = async () => {
+    const ok = await confirmAction({
+      title: "Delete this transaction?",
+      body: "It was entered by hand, so deleting it removes it for good.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.del(`/transactions/${t.id}`);
+      toast.success("Transaction deleted");
+      onChanged();
+      onDeleted?.();
+    } catch (e) {
+      toast.error("Could not delete", { description: (e as Error).message });
+    }
+  };
   const openDoc = async () => {
     if (!t.document) return;
-    window.open(await api.fileUrl(`/documents/${t.document.id}/file`), "_blank");
+    try {
+      await openDocument(t.document.id);
+    } catch (e) {
+      toast.error("Could not open the statement", { description: (e as Error).message });
+    }
   };
   const pinned = (f: string) =>
     t.pinned_fields.includes(f) ? (
@@ -203,6 +235,13 @@ export function TransactionDetail({ id, onChanged, onOpen }: { id: number; onCha
               <button className="inline-flex items-center gap-1 hover:underline" onClick={openDoc}>
                 {t.document.filename} <ExternalLink size={12} />
               </button>
+            ) : t.entry_method === "manual" ? (
+              <span className="inline-flex items-center gap-2">
+                Entered by hand
+                <Button size="sm" variant="ghost" onClick={removeManual}>
+                  Delete
+                </Button>
+              </span>
             ) : (
               humanize(t.entry_method)
             )}

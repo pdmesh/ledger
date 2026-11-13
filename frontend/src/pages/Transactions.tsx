@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronUp, EyeOff, Pin, Repeat, Sigma } from "lucide-react";
+import { ChevronDown, ChevronUp, EyeOff, Pin, Plus, Repeat, Sigma } from "lucide-react";
+import { AddTransaction } from "../components/AddTransaction";
 import { useEffect, useState } from "react";
 import { TransactionDetail } from "../components/TransactionDetail";
 import { Badge, Button, Confidence, Drawer, ErrorNote, Help, Input, Select, Term, cn } from "../components/ui";
@@ -29,6 +30,7 @@ export default function TransactionsPage({ initialFilter }: { initialFilter?: Fi
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => setF(initialFilter ?? {}), [initialFilter]);
   useEffect(() => setOffset(0), [f, q, filters]);
@@ -128,6 +130,9 @@ export default function TransactionsPage({ initialFilter }: { initialFilter?: Fi
             <Sigma size={13} /> Totals
           </Button>
         )}
+        <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+          <Plus size={13} /> Add
+        </Button>
         <span className="ml-auto text-xs text-fg-muted">{res.data ? `${res.data.total.toLocaleString()} transactions` : ""}</span>
       </div>
 
@@ -216,8 +221,19 @@ export default function TransactionsPage({ initialFilter }: { initialFilter?: Fi
       )}
 
       <Drawer open={selected !== null} onClose={() => setSelected(null)} title="Transaction" wide>
-        {selected !== null && <TransactionDetail id={selected} onChanged={() => void res.reload()} onOpen={setSelected} />}
+        {selected !== null && (
+          <TransactionDetail
+            id={selected}
+            onChanged={() => void res.reload()}
+            onOpen={setSelected}
+            onDeleted={() => {
+              setSelected(null);
+              void res.reload();
+            }}
+          />
+        )}
       </Drawer>
+      <AddTransaction open={adding} onClose={() => setAdding(false)} onAdded={() => void res.reload()} />
     </div>
   );
 }

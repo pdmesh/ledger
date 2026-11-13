@@ -116,7 +116,12 @@ In **Settings → Intelligence providers** you can add:
   binaries or reads their credentials.
 
 Cloud and CLI providers are only used after you turn on *Allow cloud and CLI providers*.
-Household names are pseudonymized in cloud prompts unless you opt in. Each task
+Household names are pseudonymized in categorisation and matching prompts unless you opt
+in. When a statement has to be read by AI (a layout the generic parser can't handle, or a
+scanned PDF), the whole statement goes to the routed `extract` provider as text or page
+images, unredacted; route `extract` to a local model to keep that on the device. Claude
+Code runs with `--restricted --strict-mcp-config`, no tools for text and only `Read`
+(confined to its temporary directory) for page images. Each task
 (classify, merchant, extract, identity, reconcile, judge, query) can be routed to its own
 provider chain with fallbacks, and every call is recorded with model, tokens, cost and
 latency, but never the prompt contents.
@@ -126,7 +131,8 @@ latency, but never the prompt contents.
 - Everything is stored locally: SQLite database plus an archive of the original files,
   which are never modified.
 - Only the last four digits of account and card numbers are persisted.
-- The backend listens on `127.0.0.1` only and requires a per-launch random token.
+- The backend listens on `127.0.0.1` only and requires a per-launch random token, sent only
+  in the `Authorization` header (never in URLs). Originals open in the OS's own viewer.
 - You can delete any imported document together with all its transactions, and you can
   create and restore full backups.
 

@@ -10,6 +10,7 @@ import json
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -162,6 +163,54 @@ def extract_rows_from_text(
         validate=validate,
     )
     return outcome.data, outcome.execution_id
+
+
+VISION_MAX_PAGES = 12
+
+
+def extract_rows_from_images(
+    session: Session,
+    images: list[Path],
+    *,
+    is_card: bool,
+    provider_factory: ProviderFactory | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Scanned (image-only) statements: a multimodal model reads the rendered pages.
+
+    Replaces OCR. Also asks for the statement header, since without a text layer the
+    deterministic metadata detection has nothing to work with.
+    """
+    router = IntelligenceRouter(session, provider_factory)
+    user = (
+        "These images are the pages of one financial statement, in order. Return "
+        '{"statement": {"institution": str|null, "account_type": '
+        '"savings"|"current"|"credit_card"|"other"|null, "account_number_last4": str|null, '
+        '"holder_name": str|null, "currency": "ISO 4217 code"|null, '
+        '"period_start": "YYYY-MM-DD"|null, "period_end": "YYYY-MM-DD"|null}, '
+        '"transactions": [{"date": "YYYY-MM-DD", "description": str, '
+        '"amount": "decimal string, negative for money leaving the account", '
+        '"balance": "decimal string or null", "reference": str|null}]}. '
+        + ("This is a credit card statement. " if is_card else "")
+        + "Include every transaction row on every page. Do not invent rows; skip "
+        "summary/total lines."
+    )
+
+    def validate(data: Any) -> dict[str, Any]:
+        rows = data["transactions"]
+        for r in rows:
+            date.fromisoformat(str(r["date"]))
+            Decimal(str(r["amount"]))
+        return data
+
+    outcome = router.run(
+        "extract",
+        "You extract financial transactions from images of statements. JSON only.",
+        user,
+        validate=validate,
+        images=images[:VISION_MAX_PAGES],
+    )
+    meta = outcome.data.get("statement") if isinstance(outcome.data, dict) else None
+    return outcome.data["transactions"], meta if isinstance(meta, dict) else {}
 
 
 def adjudicate_match(

@@ -6,6 +6,7 @@ import hashlib
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -85,6 +86,7 @@ class IntelligenceRouter:
         *,
         validate: Callable[[Any], Any] | None = None,
         item_count: int = 0,
+        images: list[Path] | None = None,
     ) -> TaskOutcome:
         """Run ``task`` through the provider chain; first valid result wins."""
         chain = self.chain(task)
@@ -106,7 +108,11 @@ class IntelligenceRouter:
             )
             try:
                 provider = self.factory(cfg)
-                result = provider.complete_json(system, user)
+                result = (
+                    provider.complete_json(system, user, images=images)
+                    if images
+                    else provider.complete_json(system, user)
+                )
                 rec.model = result.model or cfg.model
                 rec.input_tokens = result.input_tokens
                 rec.output_tokens = result.output_tokens

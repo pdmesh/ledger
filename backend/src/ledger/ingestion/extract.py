@@ -8,7 +8,12 @@ from pathlib import Path
 
 from ledger.ingestion.metadata import detect_metadata
 from ledger.ingestion.parsing import ParsedRow, ParsedStatement, ParseOptions
-from ledger.ingestion.pdf import extract_from_lines, extract_from_tables, read_pdf
+from ledger.ingestion.pdf import (
+    PdfPasswordError,
+    extract_from_lines,
+    extract_from_tables,
+    read_pdf,
+)
 from ledger.ingestion.tabular import (
     detect_header,
     extract_rows,
@@ -31,6 +36,14 @@ SUPPORTED_FORMATS = {
 
 class ExtractionError(Exception):
     pass
+
+
+class PasswordRequired(ExtractionError):  # noqa: N818 - reads as a state, not a failure
+    """The PDF is protected and no known password opens it."""
+
+
+class NoTextLayer(ExtractionError):  # noqa: N818
+    """Image-only (scanned) PDF; only a multimodal model can read it."""
 
 
 def detect_format(path: Path) -> str:
@@ -95,11 +108,15 @@ def extract_statement(
         )
         st = ParsedStatement(all_rows, header_text, md, f"tabular:{fmt}", warnings)
     elif fmt == "pdf":
-        pdf = read_pdf(path, pdf_password)
+        try:
+            pdf = read_pdf(path, pdf_password)
+        except PdfPasswordError as e:
+            raise PasswordRequired(str(e)) from None
         text = pdf.full_text
         if not text.strip():
-            raise ExtractionError(
-                "PDF has no text layer (scanned image). OCR is not yet enabled for this file."
+            raise NoTextLayer(
+                "PDF has no text layer (scanned image); it needs an AI provider that can "
+                "read images"
             )
         first = "\n".join(pdf.pages[:2])
         md = detect_metadata(

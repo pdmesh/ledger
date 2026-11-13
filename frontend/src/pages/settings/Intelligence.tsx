@@ -115,12 +115,12 @@ export default function Intelligence() {
           <Toggle
             checked={draft.allow_cloud}
             onChange={(v) => setDraft({ ...draft, allow_cloud: v })}
-            label={<span>Allow cloud and CLI providers <Help term="allow_cloud" /> <span className="text-xs text-fg-muted">— transaction descriptions and amounts are sent to them. Local providers are always allowed.</span></span>}
+            label={<span>Allow cloud and CLI providers <Help term="allow_cloud" /> <span className="text-xs text-fg-muted">— transaction descriptions and amounts are sent to them, and whole statements when AI has to read one. Local providers are always allowed.</span></span>}
           />
           <Toggle
             checked={draft.share_identity_names}
             onChange={(v) => setDraft({ ...draft, share_identity_names: v })}
-            label={<span>Share household names with cloud providers <Help term="share_names" /> <span className="text-xs text-fg-muted">— otherwise replaced by “Person 1”, “Person 2”.</span></span>}
+            label={<span>Share household names with cloud providers <Help term="share_names" /> <span className="text-xs text-fg-muted">— otherwise replaced by “Person 1”, “Person 2” (not possible when a whole statement is read).</span></span>}
           />
           <p className="text-xs text-fg-muted">
             With no provider configured the ledger runs fully deterministically: rules, merchant mappings and your corrections still classify

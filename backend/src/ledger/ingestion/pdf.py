@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import re
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -24,6 +27,35 @@ _LINE = re.compile(
 )
 
 
+class PdfPasswordError(Exception):
+    """The PDF needs a (different) user password to open."""
+
+
+@contextmanager
+def render_pages(
+    path: Path, password: str | None = None, *, max_pages: int = 12, dpi: int = 144
+) -> Iterator[tuple[list[Path], int]]:
+    """Render up to ``max_pages`` pages to temporary PNGs for multimodal models.
+
+    Yields (images, total page count); the files are removed afterwards.
+    """
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(str(path), password=password or None)
+    try:
+        with tempfile.TemporaryDirectory(prefix="ledger-pages-") as tmp:
+            out = []
+            for i in range(min(len(doc), max_pages)):
+                img = doc[i].render(scale=dpi / 72).to_pil()
+                img.thumbnail((1600, 1600))  # enough to read; keeps requests small
+                p = Path(tmp) / f"page-{i + 1}.png"
+                img.save(p, optimize=True)
+                out.append(p)
+            yield out, len(doc)
+    finally:
+        doc.close()
+
+
 class PdfText:
     def __init__(self, pages: list[str], tables: list[tuple[int, list[list[Any]]]]):
         self.pages = pages
@@ -39,7 +71,15 @@ def read_pdf(path: Path, password: str | None = None) -> PdfText:
 
     pages: list[str] = []
     tables: list[tuple[int, list[list[Any]]]] = []
-    with pdfplumber.open(str(path), password=password or "") as pdf:
+    from pdfplumber.utils.exceptions import PdfminerException
+
+    try:
+        pdf = pdfplumber.open(str(path), password=password or "")
+    except PdfminerException as e:
+        if any(type(a).__name__ == "PDFPasswordIncorrect" for a in e.args):
+            raise PdfPasswordError("PDF is password-protected") from None
+        raise
+    with pdf:
         for pno, page in enumerate(pdf.pages, start=1):
             pages.append(page.extract_text() or "")
             try:

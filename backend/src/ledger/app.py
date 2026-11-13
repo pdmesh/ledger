@@ -96,7 +96,8 @@ def create_app(rt: RuntimeSettings | None = None) -> FastAPI:
             and request.method != "OPTIONS"
         ):
             header = request.headers.get("authorization", "")
-            token = header.removeprefix("Bearer ").strip() or request.query_params.get("token", "")
+            # Header only: a token in a URL would end up in logs and browser history.
+            token = header.removeprefix("Bearer ").strip()
             if not secrets.compare_digest(token, rt.api_token):
                 return JSONResponse({"detail": "unauthorized"}, status_code=401)
         return await call_next(request)

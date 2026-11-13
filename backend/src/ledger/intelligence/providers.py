@@ -148,22 +148,47 @@ class Provider(ABC):
         self.cfg = cfg
 
     @abstractmethod
-    def complete_json(self, system: str, user: str) -> ProviderResult: ...
+    def complete_json(
+        self, system: str, user: str, images: list[Path] | None = None
+    ) -> ProviderResult:
+        """``images``: optional page images (PNG) for multimodal models."""
 
 
 class LiteLLMProvider(Provider):
     """API and local models through LiteLLM's unified completion interface."""
 
-    def complete_json(self, system: str, user: str) -> ProviderResult:
+    def complete_json(
+        self, system: str, user: str, images: list[Path] | None = None
+    ) -> ProviderResult:
+        import base64
+
         import litellm
 
         if not self.cfg.model:
             raise ProviderError(f"Provider {self.cfg.id} has no model configured")
+        content: Any = user
+        if images:
+            try:
+                if not litellm.supports_vision(model=self.cfg.model):
+                    raise ProviderError(f"{self.cfg.model} does not accept images")
+            except ProviderError:
+                raise
+            except Exception:
+                pass  # unknown to LiteLLM's catalogue (e.g. local models): just try
+            content = [{"type": "text", "text": user}] + [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "data:image/png;base64," + base64.b64encode(p.read_bytes()).decode()
+                    },
+                }
+                for p in images
+            ]
         kwargs: dict[str, Any] = {
             "model": self.cfg.model,
             "messages": [
                 {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "user", "content": content},
             ],
             "timeout": self.cfg.timeout_s,
             "max_tokens": self.cfg.max_tokens,
@@ -207,9 +232,12 @@ class LiteLLMProvider(Provider):
 
 CLI_DEFAULTS: dict[str, dict[str, Any]] = {
     # Prompt is passed on stdin. Output is a JSON envelope whose "result" holds the reply.
+    # --restricted confines file tools to the working directory and drops tools that run
+    # code; --strict-mcp-config skips the user's MCP servers. Statement content is
+    # untrusted, so the model gets no tools at all for text, and only Read for page images.
     "claude": {
         "executable": "claude",
-        "args": ["-p", "--output-format", "json"],
+        "args": ["-p", "--output-format", "json", "--restricted", "--strict-mcp-config"],
         "output": "claude_json",
     },
     # Codex non-interactive mode; "-" reads the prompt from stdin, the final message is
@@ -242,7 +270,11 @@ class CLIProvider(Provider):
     ledger's files; all data it sees is in the prompt.
     """
 
-    def complete_json(self, system: str, user: str) -> ProviderResult:
+    def complete_json(
+        self, system: str, user: str, images: list[Path] | None = None
+    ) -> ProviderResult:
+        import shutil as _sh
+
         name = self.cfg.cli or ""
         if name not in CLI_DEFAULTS:
             raise ProviderError(f"Unknown CLI adapter '{name}'")
@@ -254,9 +286,29 @@ class CLIProvider(Provider):
         args = [exe, *spec["args"], *self.cfg.extra_args]
         if self.cfg.model:
             args += ["--model", self.cfg.model]
+        # Reading page images takes the CLI roughly 15-20 s a page; allow for it.
+        timeout = max(self.cfg.timeout_s, 60 + 45 * len(images)) if images else self.cfg.timeout_s
         t0 = time.monotonic()
         with tempfile.TemporaryDirectory(prefix="ledger-cli-") as tmp:
             out_file = Path(tmp) / "last_message.txt"
+            if images:
+                # Copy the pages into the CLI's otherwise empty working directory.
+                names = []
+                for i, src in enumerate(images, start=1):
+                    dst = Path(tmp) / f"page-{i}.png"
+                    _sh.copyfile(src, dst)
+                    names.append(dst.name)
+                if name == "claude":
+                    # Read is the only tool, and --restricted keeps it inside this directory.
+                    args += ["--tools", "Read"]
+                    prompt = (
+                        f"The statement pages are image files in the current directory: "
+                        f"{', '.join(names)}. Read every one of them, in order.\n\n{prompt}"
+                    )
+                else:
+                    args += [f"--image={Path(tmp) / n}" for n in names]
+            elif name == "claude":
+                args += ["--tools", ""]
             if spec["output"] == "last_message_file":
                 args += ["--output-last-message", str(out_file), "-"]
             try:
@@ -265,11 +317,11 @@ class CLIProvider(Provider):
                     input=prompt,
                     capture_output=True,
                     text=True,
-                    timeout=self.cfg.timeout_s,
+                    timeout=timeout,
                     cwd=tmp,
                 )
             except subprocess.TimeoutExpired as e:
-                raise ProviderError(f"{name} CLI timed out after {self.cfg.timeout_s}s") from e
+                raise ProviderError(f"{name} CLI timed out after {timeout}s") from e
             if proc.returncode != 0:
                 raise ProviderError(
                     f"{name} CLI exited {proc.returncode}: {(proc.stderr or '')[-500:]}"
