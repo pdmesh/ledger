@@ -120,10 +120,29 @@ fn backend_command() -> std::io::Result<Command> {
     }
 }
 
+/// Open the backend log for appending, readable and writable by the owner only.
+fn open_private_log(file: &Path) -> Option<std::fs::File> {
+    let mut opts = OpenOptions::new();
+    opts.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        opts.mode(0o600);
+        let f = opts.open(file).ok()?;
+        // `mode` only applies on creation; tighten a log left by an older version too.
+        let _ = f.set_permissions(std::fs::Permissions::from_mode(0o600));
+        Some(f)
+    }
+    #[cfg(not(unix))]
+    {
+        opts.open(file).ok()
+    }
+}
+
 /// Forward a child stream to stderr, the in-memory tail and the log file.
 fn pump<R: Read + Send + 'static>(stream: R, log: Arc<Mutex<VecDeque<String>>>, file: PathBuf) {
     std::thread::spawn(move || {
-        let mut out = OpenOptions::new().create(true).append(true).open(&file).ok();
+        let mut out = open_private_log(&file);
         for line in BufReader::new(stream).lines().map_while(Result::ok) {
             eprintln!("[backend] {line}");
             if let Some(f) = out.as_mut() {

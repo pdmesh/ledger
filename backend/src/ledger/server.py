@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 from pathlib import Path
 
 
@@ -70,6 +71,26 @@ def _augment_path() -> None:
     os.environ["PATH"] = os.pathsep.join(merged)
 
 
+_TOKEN_RE = re.compile(r"(?i)([?&]token=)[^&\s\"]+")
+
+
+class _RedactTokenFilter(logging.Filter):
+    """Strip the per-launch API token from request paths in uvicorn's access log.
+
+    Download links carry ``?token=`` (browsers can't add an Authorization header to a
+    plain link), and the desktop shell persists backend output to ``backend.log``.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _TOKEN_RE.sub(r"\1[redacted]", a) if isinstance(a, str) else a for a in record.args
+            )
+        if isinstance(record.msg, str):
+            record.msg = _TOKEN_RE.sub(r"\1[redacted]", record.msg)
+        return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Personal Ledger local backend")
     parser.add_argument("--port", type=int, default=int(os.environ.get("LEDGER_PORT", "8765")))
@@ -91,6 +112,7 @@ def main() -> None:
     if parent and parent.isdigit():
         _watch_parent(int(parent))
     app = create_app(rt)
+    logging.getLogger("uvicorn.access").addFilter(_RedactTokenFilter())
     # Loopback only: the ledger is never exposed on the network.
     uvicorn.run(app, host="127.0.0.1", port=rt.port, log_level=args.log_level)
 
