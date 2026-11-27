@@ -10,8 +10,12 @@ asking you to review each row.
 
 > Capture everything. Classify intelligently. Reconcile automatically. Explore freely.
 
-**Status:** early MVP (v0.1). See [docs/STATUS.md](docs/STATUS.md) for what is implemented
-against the product requirements and what is next.
+- **Download:** [latest release](https://github.com/pdmesh/ledger/releases/latest) (macOS,
+  Apple silicon; unsigned, see the [install guide](docs/guide/install.md)).
+- **Website and user guide:** <https://pdmesh.github.io/ledger/>
+- **Status:** early MVP (v0.1). See [docs/STATUS.md](docs/STATUS.md) for what is
+  implemented and what is next.
+- **License:** [MIT](LICENSE).
 
 ## Architecture at a glance
 
@@ -47,7 +51,7 @@ Read more in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | `frontend/` | React + TypeScript + Tailwind UI |
 | `src-tauri/` | Tauri 2 desktop shell |
 | `scripts/build-sidecar.sh` | Builds the backend into a single executable for bundling |
-| `docs/` | Architecture, status and design notes |
+| `docs/` | Website (`index.html`), user guide (`guide/`), architecture and status notes |
 
 ## Getting started
 

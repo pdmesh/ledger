@@ -1,11 +1,11 @@
-# Implementation status (v0.1)
+# Implementation status (v0.1.0)
 
 Status of each capability against the PRD's MVP scope (section 4.1). ✅ = implemented and
 tested · 🟡 = partial · ⬜ = not started.
 
 | Capability | Status | Notes |
 |---|---|---|
-| Desktop application | 🟡 | The Tauri 2 shell starts and stops the sidecar and passes the per-launch token, verified with a Linux `.deb` release build. The macOS `.app`/`.dmg` targets are configured but have not been built or signed. The sidecar is about 135 MB, mostly LiteLLM. |
+| Desktop application | 🟡 | The Tauri 2 shell starts and stops the sidecar and passes the per-launch token. v0.1.0 ships an unsigned Apple silicon `.dmg`; a Linux `.deb` build was verified earlier. Not yet signed or notarized. The sidecar is about 135 MB, mostly LiteLLM. |
 | Local financial database | ✅ | SQLite (WAL) with Alembic migrations and a drift test. |
 | Country and currency configuration | ✅ | Onboarding, presets, and base, account and transaction currencies. |
 | Multiple household identities and aliases | ✅ | Ownership is inferred from statement holder blocks. |
@@ -52,9 +52,10 @@ tested · 🟡 = partial · ⬜ = not started.
 
 ## Known gaps
 
-1. **macOS build, code signing, notarization and auto-update.** The `.app`/`.dmg`
-   targets are configured but no macOS build has been made yet. Signing and notarization
-   need an Apple Developer ID, which only the owner can provide.
+1. **Code signing, notarization, auto-update and other platforms.** v0.1.0 ships an
+   unsigned `.dmg` for Apple silicon, built locally. Signing and notarization need an
+   Apple Developer ID, which only the owner can provide. Intel Mac, Windows and Linux
+   builds need a CI release workflow; until then they run from source.
 2. **Judge model.** The `judge` task is routable, but low-confidence second opinions are
    not invoked yet. Not needed for correctness; useful once there is more data.
 3. **Evaluation harness.** Compare models against a labelled synthetic dataset (PRD 7.5).

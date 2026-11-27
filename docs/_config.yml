@@ -1,0 +1,7 @@
+title: Ledger
+description: A local-first household ledger built from your bank and card statements.
+theme: jekyll-theme-primer
+# Developer notes stay in the repository; the site shows the landing page and user guide.
+exclude:
+  - ARCHITECTURE.md
+  - STATUS.md
