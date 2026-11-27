@@ -1,84 +1,97 @@
 # Ledger
 
-A local-first desktop application that turns heterogeneous bank, credit-card and investment
-statements into one continuously maintained, searchable household ledger.
+[![CI](https://github.com/pdmesh/ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/pdmesh/ledger/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/pdmesh/ledger)](https://github.com/pdmesh/ledger/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Drop statements in (PDF, CSV, XLSX, XLS), or point it at a folder. Ledger identifies each
-document, extracts the transactions, normalizes merchants, classifies everything, reconciles
-transfers, card settlements, refunds and duplicates, and produces cash-flow analytics, without
-asking you to review each row.
+Ledger is a free, open-source Mac app that keeps your bank and credit card statements as
+one household ledger, on your own computer.
 
-> Capture everything. Classify intelligently. Reconcile automatically. Explore freely.
+Drop in the statements you already download (PDF, CSV, XLSX or XLS), or point Ledger at a
+folder. It reads each one, categorises every transaction, and pairs up transfers between
+your accounts, card bill payments, refunds and duplicates so nothing is counted twice.
+You review only what it isn't sure about.
 
-- **Download:** [latest release](https://github.com/pdmesh/ledger/releases/latest) (macOS,
-  Apple silicon; unsigned, see the [install guide](docs/guide/install.md)).
-- **Website and user guide:** <https://pdmesh.github.io/ledger/>
-- **Status:** early MVP (v0.1). See [docs/STATUS.md](docs/STATUS.md) for what is
-  implemented and what is next.
-- **License:** [MIT](LICENSE).
+**[Website](https://pdmesh.github.io/ledger/)** ·
+**[Download](https://github.com/pdmesh/ledger/releases/latest)** ·
+**[User guide](https://pdmesh.github.io/ledger/guide/)** ·
+**[Changelog](CHANGELOG.md)**
 
-## Architecture at a glance
+## Features
 
-```
-┌──────────── Tauri 2 shell (Rust) ────────────┐
-│  window · picks loopback port + random token │
-│  starts/stops the Python sidecar             │
-│  ┌───────── React + TS UI (Vite) ─────────┐  │
-│  │ Overview · Transactions · Accounts ·   │  │
-│  │ Import Centre · Analytics · Settings   │  │
-│  └──────────────┬─────────────────────────┘  │
-└─────────────────┼────────────────────────────┘
-                  │ HTTP on 127.0.0.1 + bearer token
-┌─────────────────▼── Python backend (FastAPI) ──────────────────────────┐
-│ ingestion ─► extraction ─► classification ─► reconciliation ─► ledger  │
-│     │             │              │                  │                  │
-│ archive      tabular/PDF    rules · merchants ·   transfers ·          │
-│ (originals)  + LLM fallback history · LLM         settlements · refunds│
-│                                  │                · duplicates         │
-│                       intelligence router (task → provider chain)      │
-│                       LiteLLM (API + local) · CLI adapters             │
-│ persistent job queue · versioned config · analytics · SQLite (Alembic) │
-└────────────────────────────────────────────────────────────────────────┘
-```
+- **Imports what banks give you.** PDF, CSV and spreadsheet statements; password-protected
+  PDFs (the password stays in your keychain); scanned PDFs read by an AI model; a watched
+  folder for automatic imports.
+- **Categorises automatically.** Your rules, merchant mappings and corrections first, then
+  an optional AI model. Every category shows how confident Ledger is and why, and your
+  corrections are never overwritten.
+- **Counts every dollar once.** Transfers, card payments, refunds and duplicates from
+  overlapping statements are matched, with a review queue to confirm or reject matches.
+- **Easy to check.** Money in and out per statement, a totals bar for any filter, and
+  every transaction traced back to its statement, page and row.
+- **Private.** All data stays in one folder on your Mac. No account, no server, no
+  analytics.
 
-Read more in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+## Install
 
-## Repository layout
+Download `Ledger_<version>_aarch64.dmg` from the
+[latest release](https://github.com/pdmesh/ledger/releases/latest) and drag Ledger to
+Applications. Builds are for Macs with Apple silicon.
 
-| Path | What |
-|---|---|
-| `backend/` | Python package `ledger` (FastAPI app, domain model, engines, tests) |
-| `frontend/` | React + TypeScript + Tailwind UI |
-| `src-tauri/` | Tauri 2 desktop shell |
-| `scripts/build-sidecar.sh` | Builds the backend into a single executable for bundling |
-| `docs/` | Website (`index.html`), user guide (`guide/`), architecture and status notes |
+Ledger isn't signed with an Apple Developer ID yet. The first time you open it, macOS
+blocks it: choose **Open Anyway** in **System Settings → Privacy & Security**. The
+[install guide](docs/guide/install.md) covers this step by step.
 
-## Getting started
+Intel Macs, Windows and Linux: [build from source](#build-from-source).
 
-Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Node 20+, Rust (for the
-desktop shell), and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for
-your OS.
+## AI is optional
+
+Ledger works without any AI: rules, merchant mappings and your corrections categorise
+transactions, and anything left over is marked uncategorised. An AI provider adds
+categorising for unknown merchants and reading statements with unusual layouts or scanned
+pages. You can use:
+
+- **A local model** (Ollama, LM Studio or any OpenAI-compatible server). Nothing leaves
+  your computer.
+- **Claude Code or Codex**, using the CLI you're already signed in to. Ledger never sees
+  your login.
+- **A cloud API** (Anthropic, OpenAI, Gemini and others) with your own key, kept in the
+  macOS keychain.
+
+Cloud and CLI providers are off until you allow them. They receive transaction
+descriptions and amounts for categorising, and the whole statement when AI has to read
+one. Details: [Use AI providers](docs/guide/ai-providers.md).
+
+## Privacy
+
+- Everything is stored locally: a SQLite database plus your original statements,
+  unchanged.
+- Only the last four digits of account and card numbers are stored. API keys and PDF
+  passwords live in the macOS keychain.
+- The app's local server only accepts connections from your Mac, with a key that changes
+  every launch.
+- Ledger makes no network calls of its own. Only AI providers you configure are contacted.
+- Delete a statement and all its transactions with one action; back up everything to a
+  single zip.
+
+More in [Privacy, backups and your data](docs/guide/privacy.md).
+
+## Build from source
+
+Requirements: Python 3.11+, [uv](https://docs.astral.sh/uv/), Node 20+, Rust, and the
+[Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS.
 
 ```bash
-npm install
+npm install && npm --prefix frontend install && (cd backend && uv sync)
 ```
 
-```bash
-(cd frontend && npm install)
-```
-
-```bash
-(cd backend && uv sync)
-```
-
-**Run as a desktop app (development).** Starts Vite and the Tauri window; the shell runs
-the backend from source with `uv`:
+Run the desktop app in development (starts Vite, the Tauri window and the backend):
 
 ```bash
 npm run dev
 ```
 
-**Run in a browser (development).** Two terminals:
+Or run it in a browser, with the backend and the UI in two terminals:
 
 ```bash
 npm run backend
@@ -89,65 +102,48 @@ npm run web
 ```
 
 Then open http://localhost:5173. Data goes to the OS application-data folder; set
-`LEDGER_DATA_DIR` to use another location.
+`LEDGER_DATA_DIR` to use another one.
 
-**Build a distributable app.** Builds the Python sidecar with PyInstaller, then bundles it:
+Build the app bundle for your platform (packages the backend with PyInstaller, then the
+Tauri app):
 
 ```bash
 npm run build
 ```
 
-**Tests.**
+Run the tests:
 
 ```bash
 npm test
 ```
 
-## Intelligence providers
+## How it's built
 
-Nothing is enabled by default. Without a provider, Ledger is fully deterministic: shipped
-and user rules, merchant mappings and your corrections classify transactions, and anything
-left over is marked uncategorized with low confidence.
+A Tauri 2 shell (Rust) owns the window and starts a Python backend (FastAPI, SQLite) on
+a random loopback port with a per-launch token. The UI is React and TypeScript. Imports
+flow through extraction, classification and reconciliation; AI work is routed per task to
+a chain of providers through LiteLLM or the CLI adapters.
 
-In **Settings → Intelligence providers** you can add:
+| Path | What |
+|---|---|
+| `backend/` | Python package `ledger`: API, ingestion, classification, reconciliation, tests |
+| `frontend/` | React + TypeScript + Tailwind UI |
+| `src-tauri/` | Tauri 2 desktop shell |
+| `scripts/build-sidecar.sh` | Packages the backend as a single executable |
+| `docs/` | Website, user guide, architecture and status |
 
-- **Local models**: Ollama, MLX servers or any OpenAI-compatible endpoint (via LiteLLM).
-  Always allowed, and no data leaves the device.
-- **API providers**: Anthropic, OpenAI, Gemini or any LiteLLM-supported provider, with
-  your own keys stored in the OS keychain.
-- **CLI agents**: your own installed and logged-in Claude Code or Codex CLI, invoked in
-  non-interactive mode in an empty temporary directory. Ledger never bundles these
-  binaries or reads their credentials.
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and
+[docs/STATUS.md](docs/STATUS.md) for what's done and what's next.
 
-Cloud and CLI providers are only used after you turn on *Allow cloud and CLI providers*.
-Household names are pseudonymized in categorisation and matching prompts unless you opt
-in. When a statement has to be read by AI (a layout the generic parser can't handle, or a
-scanned PDF), the whole statement goes to the routed `extract` provider as text or page
-images, unredacted; route `extract` to a local model to keep that on the device. Claude
-Code runs with `--restricted --strict-mcp-config`, no tools for text and only `Read`
-(confined to its temporary directory) for page images. Each task
-(classify, merchant, extract, identity, reconcile, judge, query) can be routed to its own
-provider chain with fallbacks, and every call is recorded with model, tokens, cost and
-latency, but never the prompt contents.
+## Contributing
 
-## Privacy
+Issues and pull requests are welcome. Run `npm test` before opening a pull request.
 
-- Everything is stored locally: SQLite database plus an archive of the original files,
-  which are never modified.
-- Only the last four digits of account and card numbers are persisted.
-- The backend listens on `127.0.0.1` only and requires a per-launch random token, sent only
-  in the `Authorization` header (never in URLs). Originals open in the OS's own viewer.
-- You can delete any imported document together with all its transactions, and you can
-  create and restore full backups.
-
-### Keeping the repository free of personal data
-
-This repository is meant to be publishable. Test fixtures are **synthetic**: fictional
-institutions (Northwind, Contoso, Fabrikam) and people ("Alex Sample", "Sam Sample"),
-generated by `backend/tests/fixtures/make_fixtures.py`. `.gitignore` excludes databases,
-backups, `statements/` and `.env` files. Never commit real statements. To add a regression
-case for a real bank's format, recreate its layout with made-up values.
+**Never share real financial data.** Don't attach real statements, ledgers, backups or
+logs to issues, and don't commit them. Tests use synthetic statements with fictional
+institutions and people, generated by `backend/tests/fixtures/make_fixtures.py`; add new
+cases the same way, with made-up values.
 
 ## License
 
-To be decided before publication.
+[MIT](LICENSE)
