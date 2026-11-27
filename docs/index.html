@@ -109,7 +109,7 @@
   .sheet-head { font-size: 0.8rem; color: var(--pencil); font-weight: 600; }
   .sheet-head span:first-child, .line .date { padding-left: 0.6rem; }
   .sheet-head span, .line > * { padding-left: 1rem; }
-  .line .date { font-size: 0.78rem; color: var(--pencil); font-variant-numeric: tabular-nums; padding-left: 0.55rem; }
+  .line .date { font-size: 0.78rem; color: var(--pencil); font-variant-numeric: tabular-nums; padding-left: 0.55rem; white-space: nowrap; }
   .line .what { position: relative; height: var(--row); overflow: hidden; }
   .line .raw, .line .clean { position: absolute; inset: 0 0 0 1rem; display: flex; align-items: center; white-space: nowrap; }
   .line .raw { font-family: var(--mono); font-size: 0.82rem; color: var(--pencil); }
@@ -186,12 +186,12 @@
   @media (max-width: 760px) {
     .top nav a:not(:last-child) { display: none; }
     .hero { padding-top: 2rem; }
-    .sheet-head, .line { grid-template-columns: 2.4rem minmax(0, 1fr) 7.25rem; padding-right: 0.75rem; }
+    .sheet-head, .line { grid-template-columns: 3rem minmax(0, 1fr) 6.5rem; padding-right: 0.75rem; }
     .line .amt { font-size: 0.85rem; }
     .line .clean b { overflow: hidden; text-overflow: ellipsis; }
     .line .clean .link-note { display: none; }
-    .sheet::before { left: 2.4rem; } .sheet::after { left: calc(2.4rem + 3px); }
-    .sheet-foot { grid-template-columns: 2.4rem 1fr auto; }
+    .sheet::before { left: 3rem; } .sheet::after { left: calc(3rem + 3px); }
+    .sheet-foot { grid-template-columns: 3rem 1fr auto; }
     .line .cat, .sheet-head .h-cat { display: none; }
     .line .date { font-size: 0.68rem; padding-left: 0.3rem; }
     .line .raw { font-size: 0.72rem; }
@@ -232,39 +232,44 @@
     </div>
 
     <figure class="sheet-figure" style="margin:0">
-      <div class="sheet" role="img" aria-label="An example ledger page. Cryptic statement lines such as UPI/600112233/SWIGGY/swiggy@ybl become clean rows such as Swiggy, Food delivery, minus 450 rupees. A bank payment to the credit card is marked as paying the card bill and is not counted as spending.">
+      <div class="sheet" role="img" aria-label="An example ledger page. Cryptic statement lines such as DOORDASH*CHIPOTLE SAN FRANCISCO CA become clean rows such as DoorDash, Food delivery, minus 38 dollars 62. A bank payment to the credit card is marked as paying the card bill and is not counted as spending.">
         <div class="sheet-head" aria-hidden="true"><span>Date</span><span>Transaction</span><span class="h-cat">Category</span><span style="text-align:right">Amount</span></div>
         <div class="line" style="--i:0" aria-hidden="true">
-          <span class="date">01 Jan</span>
-          <span class="what"><span class="raw">NEFT CR-ACME CORP-SALARY JAN</span><span class="clean"><b>Acme Corp</b><em>Salary</em></span></span>
-          <span class="cat">Income</span><span class="amt in">+1,50,000.00</span>
+          <span class="date">Jan 2</span>
+          <span class="what"><span class="raw">ACH DEPOSIT ACME CORP PAYROLL PPD</span><span class="clean"><b>Acme Corp</b><em>Paycheck</em></span></span>
+          <span class="cat">Income</span><span class="amt in">+4,250.00</span>
         </div>
         <div class="line" style="--i:1" aria-hidden="true">
-          <span class="date">03 Jan</span>
-          <span class="what"><span class="raw">UPI/600112233/SWIGGY/swiggy@ybl</span><span class="clean"><b>Swiggy</b><em>Northwind savings</em></span></span>
-          <span class="cat">Food delivery</span><span class="amt">−450.00</span>
+          <span class="date">Jan 3</span>
+          <span class="what"><span class="raw">DOORDASH*CHIPOTLE SAN FRANCISCO CA</span><span class="clean"><b>DoorDash</b><em>Chipotle</em></span></span>
+          <span class="cat">Food delivery</span><span class="amt">−38.62</span>
         </div>
         <div class="line" style="--i:2" aria-hidden="true">
-          <span class="date">05 Jan</span>
-          <span class="what"><span class="raw">IMPS-TRF TO OWN AC XX8765</span><span class="clean"><b>To Contoso savings</b><span class="link-note">your own account</span></span></span>
-          <span class="cat">Transfer</span><span class="amt">−20,000.00</span>
+          <span class="date">Jan 4</span>
+          <span class="what"><span class="raw">APLPAY TST* BLUE BOTTLE OAKLAND CA</span><span class="clean"><b>Blue Bottle Coffee</b><em>Apple Pay</em></span></span>
+          <span class="cat">Coffee</span><span class="amt">−6.75</span>
         </div>
         <div class="line" style="--i:3" aria-hidden="true">
-          <span class="date">10 Jan</span>
-          <span class="what"><span class="raw">CC PAYMENT FABRIKAM CARD XX9988</span><span class="clean"><b>Fabrikam card bill</b><span class="link-note">matched to card</span></span></span>
-          <span class="cat">Card payment</span><span class="amt">−30,000.00</span>
+          <span class="date">Jan 6</span>
+          <span class="what"><span class="raw">ONLINE TRANSFER TO SAV XXXXXX4821</span><span class="clean"><b>To Contoso savings</b><span class="link-note">your own account</span></span></span>
+          <span class="cat">Transfer</span><span class="amt">−500.00</span>
         </div>
         <div class="line" style="--i:4" aria-hidden="true">
-          <span class="date">12 Jan</span>
-          <span class="what"><span class="raw">ACH D- EXAMPLE MUTUAL FUND SIP</span><span class="clean"><b>Example Mutual Fund</b><em>Monthly SIP</em></span></span>
-          <span class="cat">Investment</span><span class="amt">−10,000.00</span>
+          <span class="date">Jan 12</span>
+          <span class="what"><span class="raw">FABRIKAM CARD EPAYMENT ID 0119988</span><span class="clean"><b>Fabrikam card bill</b><span class="link-note">matched to card</span></span></span>
+          <span class="cat">Card payment</span><span class="amt">−1,240.18</span>
         </div>
         <div class="line" style="--i:5" aria-hidden="true">
-          <span class="date">25 Jan</span>
-          <span class="what"><span class="raw">UPI/600554433/RENT JAN/landlord@okaxis</span><span class="clean"><b>Rent</b><em>Monthly</em></span></span>
-          <span class="cat">Housing</span><span class="amt">−25,000.00</span>
+          <span class="date">Jan 15</span>
+          <span class="what"><span class="raw">ACH DEBIT EXAMPLE BROKERAGE 401K</span><span class="clean"><b>Example Brokerage</b><em>Monthly contribution</em></span></span>
+          <span class="cat">Investment</span><span class="amt">−300.00</span>
         </div>
-        <div class="sheet-foot" aria-hidden="true"><span></span><span>Spent in January</span><span>₹25,450.00</span></div>
+        <div class="line" style="--i:6" aria-hidden="true">
+          <span class="date">Jan 31</span>
+          <span class="what"><span class="raw">ZELLE PAYMENT TO J SAMPLE RENT</span><span class="clean"><b>Rent</b><em>Zelle, monthly</em></span></span>
+          <span class="cat">Housing</span><span class="amt">−2,150.00</span>
+        </div>
+        <div class="sheet-foot" aria-hidden="true"><span></span><span>Spent in January</span><span>$2,195.37</span></div>
       </div>
       <figcaption class="caption">An illustration with made-up data. The transfer and the card bill payment move money between your own accounts, so they aren't counted as spending.</figcaption>
     </figure>
@@ -277,8 +282,8 @@
       <ol class="steps">
         <li><h3>It works out what the file is</h3><p>Bank, account, whose account it is, and the statement period. A new account is created the first time it's seen.</p></li>
         <li><h3>It reads the transactions</h3><p>From the statement's own table where it can, and with an AI model when the layout is unusual or the PDF is a scan. Password-protected PDFs wait until you unlock them.</p></li>
-        <li><h3>It tidies and categorises</h3><p>"UPI/600112233/SWIGGY" becomes Swiggy, in Food delivery. Your rules and past corrections come first; your corrections are never overwritten.</p></li>
-        <li><h3>It pairs up the same money</h3><p>Transfers between your accounts, card bill payments, refunds and duplicate rows from overlapping statements are linked, so totals count each pound, dollar or rupee once.</p></li>
+        <li><h3>It tidies and categorises</h3><p>"DOORDASH*CHIPOTLE SAN FRANCISCO CA" becomes DoorDash, in Food delivery. Your rules and past corrections come first; your corrections are never overwritten.</p></li>
+        <li><h3>It pairs up the same money</h3><p>Transfers between your accounts, card bill payments, refunds and duplicate rows from overlapping statements are linked, so every dollar is counted once.</p></li>
         <li><h3>You check what's uncertain</h3><p>Low-confidence categories and new matches are one filter away. Totals per statement let you compare against the bill in seconds.</p></li>
       </ol>
     </div>
